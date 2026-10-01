@@ -1,0 +1,2 @@
+# Local development only. Generate a random management key of at least 32 characters.
+ADMIN_KEY=
