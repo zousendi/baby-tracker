@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.next/
+*.log
+artifacts/
+test-results/
+playwright-report/
