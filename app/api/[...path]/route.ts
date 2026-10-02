@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { database, familySelect, recordSelect } from '../../../lib/data';
 import { digest, equal, hashPassword, randomToken, verifyPassword } from '../../../lib/security';
+import { normalizeWakeAt } from '../../../lib/record-wake';
 import type { User } from '../../../lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,10 @@ function validateRecord(b: Record<string, unknown>) {
   const right = kind === 'breast' ? int(b.right, 0, 180) : 0;
   if (kind === 'breast' && left + right === 0) throw new ApiError(400, 'INVALID_DURATION');
   const milkType = b.milkType === 'expressed' ? 'expressed' : 'formula';
-  return { kind, at: d.toISOString(), ml, left, right, milkType, note: str(b.note ?? '', 200, true) };
+  let wakeAt: string | null;
+  try { wakeAt = normalizeWakeAt(kind, d.toISOString(), b.wakeAt); }
+  catch { throw new ApiError(400, 'INVALID_WAKE_TIME'); }
+  return { kind, at: d.toISOString(), ml, left, right, milkType, wakeAt, note: str(b.note ?? '', 200, true) };
 }
 async function rateLimit(key: string, limit: number) {
   const db = database(), now = Date.now();
@@ -138,9 +142,9 @@ async function handle(request: Request) {
     if (path === 'records' && method === 'POST') {
       const b = await body(request), r = validateRecord(b), id = str(b.id, 60);
       if (!/^[a-f0-9-]{36}$/.test(id)) throw new ApiError(400, 'INVALID_INPUT');
-      const result = await db.prepare(`INSERT OR IGNORE INTO records(id,family_id,kind,at,ml,left_minutes,right_minutes,milk_type,note,created_by,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, user.familyId, r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, user.id, user.id, Date.now()).run();
+      const result = await db.prepare(`INSERT OR IGNORE INTO records(id,family_id,kind,at,ml,left_minutes,right_minutes,milk_type,note,wake_at,created_by,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, user.familyId, r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, r.wakeAt, user.id, user.id, Date.now()).run();
       if (!result.meta.changes) {
-        const existing = await db.prepare('SELECT kind,at,ml,left_minutes AS "left",right_minutes AS "right",milk_type AS milkType,note FROM records WHERE id=? AND family_id=?').bind(id, user.familyId).first();
+        const existing = await db.prepare('SELECT kind,at,ml,left_minutes AS "left",right_minutes AS "right",milk_type AS milkType,note,wake_at AS wakeAt FROM records WHERE id=? AND family_id=?').bind(id, user.familyId).first();
         if (!existing || Object.entries(r).some(([key, value]) => existing[key] !== value)) throw new ApiError(409, 'CONFLICT');
       }
       return reply({ ok: true, id }, 201);
@@ -152,7 +156,7 @@ async function handle(request: Request) {
       if (method === 'DELETE') result = await db.prepare('DELETE FROM records WHERE id=? AND family_id=? AND version=?').bind(id, user.familyId, version).run();
       else {
         const r = validateRecord(b);
-        result = await db.prepare('UPDATE records SET kind=?,at=?,ml=?,left_minutes=?,right_minutes=?,milk_type=?,note=?,updated_by=?,updated_at=?,version=version+1 WHERE id=? AND family_id=? AND version=?').bind(r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, user.id, Date.now(), id, user.familyId, version).run();
+        result = await db.prepare('UPDATE records SET kind=?,at=?,ml=?,left_minutes=?,right_minutes=?,milk_type=?,note=?,wake_at=?,updated_by=?,updated_at=?,version=version+1 WHERE id=? AND family_id=? AND version=?').bind(r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, r.wakeAt, user.id, Date.now(), id, user.familyId, version).run();
       }
       if (!result.meta.changes) throw new ApiError(409, 'CONFLICT');
       return reply({ ok: true });

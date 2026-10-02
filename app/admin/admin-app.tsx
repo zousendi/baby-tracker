@@ -10,7 +10,7 @@ export default function AdminApp(){
   const [familyId,setFamilyId]=useState(''),[resetUser,setResetUser]=useState('');
   const [ready,setReady]=useState(false);
   const t=(k:Parameters<typeof text>[1])=>text(lang,k);
-  useEffect(()=>{setReady(true);try{if(localStorage.getItem('komorebi-language')==='zh')setLang('zh');}catch{}},[]);
+  useEffect(()=>{queueMicrotask(()=>{setReady(true);try{if(localStorage.getItem('komorebi-language')==='zh')setLang('zh');}catch{}});},[]);
   useEffect(()=>{document.documentElement.lang=lang==='zh'?'zh-CN':'ja';},[lang]);
   const fail=(e:unknown)=>setError(e instanceof RequestError?e.code:'requestFailed');
   async function refresh(secret=key){const result=await api<Directory>('admin/directory','GET',undefined,secret);setDirectory(result);setFamilyId(old=>old||result.families[0]?.id||'');}

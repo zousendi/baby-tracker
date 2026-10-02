@@ -1,0 +1,1 @@
+ALTER TABLE `records` ADD `wake_at` text;

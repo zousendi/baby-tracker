@@ -8,6 +8,13 @@
       "when": 1790859553652,
       "tag": "0000_polite_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790946648347,
+      "tag": "0001_neat_sentry",
+      "breakpoints": true
     }
   ]
 }

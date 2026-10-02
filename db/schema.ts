@@ -21,6 +21,7 @@ export const records = sqliteTable('records', {
   kind: text('kind').notNull(), at: text('at').notNull(), ml: integer('ml').notNull().default(0),
   left: integer('left_minutes').notNull().default(0), right: integer('right_minutes').notNull().default(0),
   milkType: text('milk_type').notNull().default('formula'), note: text('note').notNull().default(''),
+  wakeAt: text('wake_at'),
   createdBy: text('created_by').notNull().references(() => users.id), updatedBy: text('updated_by').notNull().references(() => users.id),
   version: integer('version').notNull().default(1), updatedAt: integer('updated_at').notNull(),
 }, t => [index('idx_records_family_at').on(t.familyId, t.at)]);
