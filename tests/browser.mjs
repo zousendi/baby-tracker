@@ -23,6 +23,31 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No horizontal overflow at ${width}px`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.getByText('ミルク量の見守り', { exact: true }).count(), 0);
+  await page.locator('.mobile-nav [data-view="trends"]').click();
+  for (const count of [7, 14, 30]) {
+    await page.getByRole('button', { name: count + '日間', exact: true }).click();
+    assert.equal(await page.locator('.daily-analysis tbody tr').count(), count);
+  }
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Analysis fits ' + width);
+  }
+  await page.screenshot({ path: 'artifacts/analysis-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: '7日間', exact: true }).click();
+  await page.screenshot({ path: 'artifacts/analysis-mobile.png', fullPage: true });
+  await page.locator('#analysis-milk-type').selectOption('expressed');
+  assert.equal(await page.locator('.rhythm-dot').count(), 0);
+  assert.match(await page.locator('.analysis-empty').innerText(), /記録はありません/);
+  await page.locator('#analysis-milk-type').selectOption('all');
+  await page.locator('[data-analysis-day]').first().click();
+  assert.equal(await page.locator('#selected-date').inputValue(), '2026-09-25');
+  await page.locator('.feed-interval').first().click();
+  assert.ok(await page.locator('#record-wake').isVisible());
+  await page.getByRole('button', { name: '変更を保存', exact: true }).click();
+  assert.equal(await page.locator('.analysis-controls').count(), 1);
+  await page.locator('.mobile-nav [data-view="today"]').click();
   await page.getByRole('button', { name: '自分の記録をはじめる' }).click();
   assert.match(await page.locator('#milk-total').innerText(), /^0/);
   await page.getByRole('button', { name: '授乳・ミルク', exact: true }).click();
@@ -37,6 +62,8 @@ try {
   assert.equal(await page.locator('.record-info small').innerText(), 'おいしく飲めた <script>invalid</script>');
   await page.locator('.record-row').first().click();
   await page.locator('#record-ml').fill('125');
+  await page.locator('#record-at').fill('2026-10-01T12:00');
+  await page.locator('#record-wake').fill('2026-10-01T14:00');
   await page.getByRole('button', { name: '変更を保存' }).click();
   assert.match(await page.locator('#milk-total').innerText(), /^125/);
   await page.locator('[data-record="pee"]').click();
@@ -59,15 +86,15 @@ try {
   assert.equal(await page.locator('.stat-value').nth(1).innerText(), '2回');
   await page.locator('.mobile-nav [data-action="settings"]').click();
   await page.locator('#baby-name').fill('ひなた');
-  await page.locator('#goal-low').fill('600');
-  await page.locator('#goal-high').fill('500');
-  await page.getByRole('button', { name: '設定を保存' }).click();
-  assert.match(await page.locator('#settings-error').innerText(), /上限/);
-  await page.locator('#goal-high').fill('800');
+  assert.equal(await page.locator('#goal-low').count(), 0);
   await page.getByRole('button', { name: '設定を保存' }).click();
   assert.match(await page.locator('h1').innerText(), /ひなた/);
   await page.locator('.mobile-nav [data-view="trends"]').click();
-  assert.equal(await page.locator('tbody tr').count(), 7);
+  assert.equal(await page.locator('.daily-analysis tbody tr').count(), 7);
+  assert.match(await page.locator('.wake-result').innerText(), /2時間/);
+  await page.reload();
+  await page.locator('.mobile-nav [data-view="trends"]').click();
+  assert.match(await page.locator('.wake-result').innerText(), /2時間/);
   await page.locator('.mobile-nav [data-view="guide"]').click();
   assert.equal(await page.locator('.guide-card').count(), 4);
   await page.locator('.mobile-nav [data-view="today"]').click();
@@ -96,7 +123,7 @@ try {
   assert.deepEqual(errors, []);
   const blocked = await context.request.get(`${baseURL}/.git/config`);
   assert.equal(blocked.status(), 404);
-  console.log('Browser checks passed: responsive layouts, create/edit/delete/undo, diapers, breastfeeding, persistence, profiles, goals, date navigation, export, storage failure, and private-file blocking.');
+  console.log('Browser checks passed: responsive layouts, create/edit/delete/undo, diapers, breastfeeding, persistence, profiles, milk analysis, waking records, date navigation, export, storage failure, and private-file blocking.');
 } finally {
   await browser.close();
 }

@@ -5,6 +5,7 @@ const host = process.env.HOST || '0.0.0.0';
 const files = new Map([
   ['/', ['index.html', 'text/html']], ['/index.html', ['index.html', 'text/html']],
   ['/icon.svg', ['icon.svg', 'image/svg+xml']], ['/src/app.js', ['src/app.js', 'text/javascript']],
+  ['/src/analysis.js', ['src/analysis.js', 'text/javascript']],
   ['/src/model.js', ['src/model.js', 'text/javascript']], ['/src/style.css', ['src/style.css', 'text/css']],
 ]);
 http.createServer(async (req, res) => {
