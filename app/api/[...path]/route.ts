@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers';
-import { database, familySelect, recordSelect } from '../../../lib/data';
+import { database, familySelect, recordSelect, weightSelect } from '../../../lib/data';
 import { digest, equal, hashPassword, randomToken, verifyPassword } from '../../../lib/security';
 import { normalizeWakeAt } from '../../../lib/record-wake';
+import { validateWeight } from '../../../lib/weight';
 import type { User } from '../../../lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,10 @@ function validateRecord(b: Record<string, unknown>) {
   try { wakeAt = normalizeWakeAt(kind, d.toISOString(), b.wakeAt); }
   catch { throw new ApiError(400, 'INVALID_WAKE_TIME'); }
   return { kind, at: d.toISOString(), ml, left, right, milkType, wakeAt, note: str(b.note ?? '', 200, true) };
+}
+function weightInput(b: Record<string, unknown>) {
+  try { return validateWeight(b); }
+  catch (error) { throw new ApiError(400, error instanceof Error ? error.message : 'INVALID_INPUT'); }
 }
 async function rateLimit(key: string, limit: number) {
   const db = database(), now = Date.now();
@@ -137,7 +142,31 @@ async function handle(request: Request) {
     if (path === 'state' && method === 'GET') {
       const family = await db.prepare(`SELECT ${familySelect} FROM families WHERE id=?`).bind(user.familyId).first();
       const records = await db.prepare(`SELECT ${recordSelect} FROM records r JOIN users u ON u.id=r.updated_by WHERE r.family_id=? ORDER BY r.at DESC`).bind(user.familyId).all();
-      return reply({ user, family, records: records.results, serverTime: Date.now() });
+      const weights = await db.prepare(`SELECT ${weightSelect} FROM weights w JOIN users u ON u.id=w.updated_by WHERE w.family_id=? ORDER BY w.day DESC`).bind(user.familyId).all();
+      return reply({ user, family, records: records.results, weights: weights.results, serverTime: Date.now() });
+    }
+    if (path === 'weights' && method === 'POST') {
+      const b = await body(request), w = weightInput(b), id = str(b.id, 60);
+      if (!/^[a-f0-9-]{36}$/.test(id)) throw new ApiError(400, 'INVALID_INPUT');
+      const result = await db.prepare('INSERT OR IGNORE INTO weights(id,family_id,day,grams,note,created_by,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)').bind(id, user.familyId, w.day, w.grams, w.note, user.id, user.id, Date.now()).run();
+      if (!result.meta.changes) {
+        const existing = await db.prepare('SELECT day,grams,note FROM weights WHERE id=? AND family_id=?').bind(id, user.familyId).first();
+        if (!existing || Object.entries(w).some(([key,value])=>existing[key]!==value)) throw new ApiError(409, 'WEIGHT_DAY_EXISTS');
+      }
+      return reply({ok:true,id},201);
+    }
+    if (/^weights\/[^/]+$/.test(path) && ['PATCH','DELETE'].includes(method)) {
+      const id=path.split('/')[1], b=await body(request), version=int(b.version,1,2147483647);
+      if (!await db.prepare('SELECT id FROM weights WHERE id=? AND family_id=?').bind(id,user.familyId).first()) throw new ApiError(404,'NOT_FOUND');
+      let result;
+      if (method==='DELETE') result=await db.prepare('DELETE FROM weights WHERE id=? AND family_id=? AND version=?').bind(id,user.familyId,version).run();
+      else {
+        const w=weightInput(b);
+        try { result=await db.prepare('UPDATE weights SET day=?,grams=?,note=?,updated_by=?,updated_at=?,version=version+1 WHERE id=? AND family_id=? AND version=?').bind(w.day,w.grams,w.note,user.id,Date.now(),id,user.familyId,version).run(); }
+        catch(error) { if(String(error).includes('UNIQUE'))throw new ApiError(409,'WEIGHT_DAY_EXISTS');throw error; }
+      }
+      if(!result.meta.changes)throw new ApiError(409,'CONFLICT');
+      return reply({ok:true});
     }
     if (path === 'records' && method === 'POST') {
       const b = await body(request), r = validateRecord(b), id = str(b.id, 60);

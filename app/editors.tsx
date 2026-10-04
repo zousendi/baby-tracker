@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { Check, X, Minus, Plus, Milk, Droplets, Circle, Download, LogOut } from 'lucide-react';
-import type { Family, Kind, Language, RecordItem } from '../lib/types';
+import type { Family, Kind, Language, RecordItem, WeightRecord } from '../lib/types';
 import { text, errorText } from '../lib/i18n';
 import { api, RequestError } from '../lib/client';
 import { dayKey, localInput } from '../lib/model';
@@ -29,4 +29,20 @@ export function ProfileEditor({lang,family,onClose,onSaved,onExport,onLogout}:{l
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   async function save(e:React.FormEvent<HTMLFormElement>){e.preventDefault();if(busy)return;setBusy(true);setError('');const f=new FormData(e.currentTarget);try{await api('profile','PATCH',{babyName:f.get('babyName'),birthday:f.get('birthday'),goalLow:family.goalLow,goalHigh:family.goalHigh,version:openedVersion});await onSaved();}catch(e){setError(e instanceof RequestError?e.code:'requestFailed');}finally{setBusy(false);}}
   return <Modal title={t('settings')} onClose={onClose}><form onSubmit={save}><header className="dialog-head"><h2>{t('settings')}</h2><button type="button" className="icon-button" disabled={busy} aria-label={t('close')} onClick={onClose}><X/></button></header><div className="dialog-body"><div className="field"><label htmlFor="baby-name">{t('babyName')}</label><input id="baby-name" name="babyName" defaultValue={family.babyName} maxLength={40} required/></div><div className="field"><label htmlFor="birthday">{t('birthday')} <small>{t('optional')}</small></label><input id="birthday" name="birthday" type="date" defaultValue={family.birthday} max={dayKey()}/></div>{error&&<p className="error-box" role="alert">{errorText(lang,error)}</p>}<section className="settings-section"><h3>{t('storageTitle')}</h3><p>{t('storageHint')}</p><button type="button" className="subtle-button" onClick={onExport}><Download size={17}/>{t('export')}</button><button type="button" className="text-button logout-button" disabled={busy} onClick={onLogout}><LogOut size={17}/>{t('logout')}</button></section></div><footer className="dialog-footer"><button className="primary-button" disabled={busy} type="submit">{busy?t('saving'):t('saveSettings')}</button></footer></form></Modal>;
+}
+export function WeightEditor({lang,record,selectedDay,onClose,onSaved,onReload}:{lang:Language;record?:WeightRecord;selectedDay:string;onClose:()=>void;onSaved:(day?:string,deleted?:boolean)=>Promise<void>;onReload:()=>Promise<void>}) {
+  const t=(key:Parameters<typeof text>[1])=>text(lang,key);
+  const [draft,setDraft]=useState({id:record?.id||crypto.randomUUID(),day:record?.day||selectedDay,grams:record?String(record.grams):'',note:record?.note||'',version:record?.version||1});
+  const [busy,setBusy]=useState(false),[error,setError]=useState('');
+  async function save(e:React.FormEvent){
+    e.preventDefault();if(busy)return;setBusy(true);setError('');
+    try{await api(record?`weights/${record.id}`:'weights',record?'PATCH':'POST',{...draft,grams:Number(draft.grams)});await onSaved(draft.day);}
+    catch(e){setError(e instanceof RequestError?e.code:'requestFailed');}finally{setBusy(false);}
+  }
+  async function remove(){
+    if(!record||busy||!confirm(t('deleteWeightConfirm')))return;setBusy(true);setError('');
+    try{await api(`weights/${record.id}`,'DELETE',{version:draft.version});await onSaved(undefined,true);}
+    catch(e){setError(e instanceof RequestError?e.code:'requestFailed');}finally{setBusy(false);}
+  }
+  return <Modal title={t(record?'editWeight':'addWeight')} onClose={onClose}><form onSubmit={save}><header className="dialog-head"><div><p className="eyebrow">GROWING DAY BY DAY</p><h2>{t(record?'editWeight':'addWeight')}</h2></div><button className="icon-button" type="button" disabled={busy} aria-label={t('close')} onClick={onClose}><X/></button></header><div className="dialog-body"><p className="muted small">{t('weightDailyHint')}</p><div className="field"><label htmlFor="weight-day">{t('measurementDay')} <small>{t('japanTime')}</small></label><input id="weight-day" type="date" required value={draft.day} max={dayKey()} onChange={e=>setDraft(d=>({...d,day:e.target.value}))}/></div><div className="field"><label htmlFor="weight-grams">{t('weight')} / g</label><input id="weight-grams" type="number" inputMode="numeric" required min={1} max={50000} step={1} value={draft.grams} placeholder="3500" onChange={e=>setDraft(d=>({...d,grams:e.target.value}))}/><p className="muted small">{t('weightUnitHint')}</p></div><div className="field"><label htmlFor="weight-note">{t('note')} <small>{t('optional')}</small></label><textarea id="weight-note" rows={2} maxLength={200} value={draft.note} placeholder={t('weightNotePlaceholder')} onChange={e=>setDraft(d=>({...d,note:e.target.value}))}/></div>{error&&<div className="error-box" role="alert">{errorText(lang,error)}{['CONFLICT','NOT_FOUND','WEIGHT_DAY_EXISTS'].includes(error)&&<button type="button" className="text-button" onClick={onReload}>{t('refreshConflict')}</button>}</div>}<p className="muted small">{t('serverSaving')}</p></div><footer className="dialog-footer">{record&&<button type="button" className="danger-button" disabled={busy} onClick={remove}>{t('delete')}</button>}<button type="submit" className="primary-button" disabled={busy}><Check size={18}/>{busy?t('saving'):t(record?'update':'save')}</button></footer></form></Modal>;
 }

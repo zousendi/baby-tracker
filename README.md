@@ -24,6 +24,22 @@
 - ミルク／搾母乳で絞り込み。次の授乳は直母も含めて対応付けます。次が未記録の授乳は間隔の集計に含めません。
 - ミルク量の見守り・目標値設定を画面から撤去。既存の目標値のDB列は互換性のため保持し、分析には使用しません。
 
+## 体重の記録
+
+- 「今日の記録」に体重カードを追加。測定日とグラム（例：3.5 kg → 3500 g）、任意のメモを入力できます。過去の日付も選択できます。
+- 家庭ごとに1日1件。記録済みの日は編集・削除し、家族間で同期します。同時編集はバージョンで保護し、同日の重複は保存しません。
+- 選択日の体重、前回の実測日からの増減、7・30・90日間の実測値を表示。測定のない日は補完しません。グラフの点や測定一覧から編集できます。
+- JSONエクスポートに `weights` を含みます。授乳・おむつの記録や集計とは別に保持します。
+- **公開環境で新コードを動かす前に `drizzle/0002_sharp_alex_wilder.sql` を1回適用してください。** 初期移行・起床時刻移行も適用済みである必要があります。GitへのpushではDB移行は実行されません。
+
+ローカルの追加移行（この作業環境では適用済み）：
+
+```text
+node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0002_sharp_alex_wilder.sql
+```
+
+検証：`npm test`、`npm run check`、`npm run build`。`npm run test:weight-ui` はテスト用データを用いた画面検証（既定ポート5173、`TEST_URL` で変更、`TEST_BROWSER=webkit` でWebKit）。`npm run test:weight-api` は実際のローカルDBを使うAPI検証（既定ポート5178）。API検証の一時家庭は `.sites-runtime/weight-test-cleanup.sql` に出力したSQLで削除できます。
+
 ## 起動・ビルド
 
 Node.js 22.13以上を使用。

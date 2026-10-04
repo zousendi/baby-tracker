@@ -5,3 +5,4 @@ export function database(): D1Database {
 }
 export const familySelect = 'id,name,baby_name AS babyName,birthday,goal_low AS goalLow,goal_high AS goalHigh,version';
 export const recordSelect = `r.id,r.kind,r.at,r.ml,r.left_minutes AS "left",r.right_minutes AS "right",r.milk_type AS milkType,r.note,r.wake_at AS wakeAt,r.version,r.updated_at AS updatedAt,u.display_name AS author`;
+export const weightSelect = 'w.id,w.day,w.grams,w.note,w.version,w.updated_at AS updatedAt,u.display_name AS author';
