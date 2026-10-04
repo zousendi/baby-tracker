@@ -14,6 +14,29 @@ export function goal(ml: number, low: number | null, high: number | null, today:
   return ml < low ? today ? 'inProgress' : 'below' : ml > high ? 'above' : 'within';
 }
 export type MilkFilter = 'all' | 'formula' | 'expressed';
+export function cumulativeMilk(records: RecordItem[], day: string, milkType: MilkFilter = 'all', now = new Date()) {
+  const today = dayKey(now);
+  const elapsed = (+now - +new Date(`${today}T00:00:00+09:00`)) / 60000;
+  const comparisonMinute = day === today ? elapsed : 1440;
+  return [-2, -1, 0].map(offset => {
+    const key = shiftDay(day, offset);
+    const endMinute = key === today ? elapsed : 1440;
+    const start = +new Date(`${key}T00:00:00+09:00`);
+    const rows = records.filter(r => r.kind === 'milk' && dayKey(r.at) === key && +new Date(r.at) <= +now && (milkType === 'all' || r.milkType === milkType))
+      .slice().sort((a,b) => +new Date(a.at) - +new Date(b.at));
+    let total = 0, sameTimeTotal = 0;
+    const points = [{minute: 0, ml: 0}];
+    for (const row of rows) {
+      const minute = (+new Date(row.at) - start) / 60000;
+      points.push({minute, ml: total});
+      total += row.ml;
+      points.push({minute, ml: total});
+      if (minute <= comparisonMinute) sameTimeTotal += row.ml;
+    }
+    points.push({minute: endMinute, ml: total});
+    return {key, offset, points, total, sameTimeTotal, hasRecords: rows.length > 0, endMinute};
+  });
+}
 export type AnalysisRange = 7 | 14 | 30;
 export type MilkEvent = RecordItem & { next: RecordItem | null; gap: number | null; wakeGap: number | null };
 export function median(values: (number | null)[]) {

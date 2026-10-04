@@ -1,5 +1,8 @@
 import type { Language } from './types';
 const words = {
+  cumulativeTitle: ['累積ミルク量の比較','累计奶量比较'], twoDaysAgo: ['おととい','前天'], yesterdayShort: ['昨日','昨天'],
+  cumulativeNow: ['凡例の量は現在と同じ時刻まで。今日の線は現在時刻まで表示します。','图例奶量均截至当前相同时刻。今天的曲线显示至当前时间。'], cumulativeFullDay: ['選択日とその前2日の、1日を通した累積量を比較します。','比较所选日期及前两天全天的累计奶量。'],
+  cumulativeNote: ['授乳時刻ごとに飲んだ量を積み上げます。対象のミルク・搾母乳を集計し、直母は含みません。記録のない日は線を表示しません。','按每次喂奶时间累加饮用量。统计所选类型的配方奶、瓶喂母乳，不含亲喂。无记录的日期不显示曲线。'],
   analysisHeading: ['量とリズムを、ふりかえる。','回顾奶量与喂养节奏。'], analysisHint: ['いつもと比べて、どれくらい飲んで、どれくらい空いた？','与平时相比，喝了多少，间隔多久？'],
   analysisRange: ['{range}日間','{range}天'], analysisType: ['対象','类型'], analysisFormula: ['ミルクのみ','仅配方奶'], analysisExpressed: ['搾母乳のみ','仅瓶喂母乳'],
   analysisToday: ['今日、ここまで','今天截至目前'], analysisSelected: ['選択日の合計','所选日期总量'], analysisAverage: ['選択日の1回あたり','所选日期每次平均量'], analysisGap: ['次の授乳まで・選択日','所选日期至下次喂奶间隔'],

@@ -61,7 +61,19 @@ try{
   await pp.screenshot({path:'artifacts/analysis-desktop-'+engine+'.png',fullPage:true});
   await pp.setViewportSize({width:390,height:844});await pp.getByRole('button',{name:'7日間',exact:true}).click();
   await pp.screenshot({path:'artifacts/analysis-mobile-'+engine+'.png',fullPage:true});
-  await pp.locator('.feed-interval').first().click();await pp.getByRole('button',{name:'変更を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});assert.equal(await pp.locator('.analysis-controls').count(),1);
+  const rhythmTimes=await pp.locator('.feed-interval time').allTextContents();
+  assert.deepEqual(rhythmTimes,[...rhythmTimes].sort().reverse(),'Rhythm log is newest first');
+  assert.equal(await pp.locator('.cumulative-legend>div').count(),3);
+  await pp.locator('.feed-interval').first().click();
+  for(const width of [320,390,768,1440]){
+    await pp.setViewportSize({width,height:600});
+    assert.ok(await pp.locator('dialog').evaluate(d=>d.scrollWidth<=d.clientWidth),`Editor has no horizontal overflow at ${width}`);
+    assert.equal(await pp.locator('dialog').evaluate(d=>getComputedStyle(d).overflowY),'auto');
+    await pp.locator('dialog').evaluate(d=>{d.scrollTop=100;d.scrollLeft=100;});
+    assert.equal(await pp.locator('dialog').evaluate(d=>d.scrollLeft),0);
+    assert.ok(await pp.locator('dialog').evaluate(d=>d.scrollTop>0),'Editor still scrolls vertically');
+  }
+  await pp.setViewportSize({width:390,height:844});await pp.getByRole('button',{name:'変更を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});assert.equal(await pp.locator('.analysis-controls').count(),1);
   await mp.locator('.mobile-nav').getByRole('button',{name:'奶量分析',exact:true}).click();await mp.getByRole('button',{name:'14天',exact:true}).click();assert.equal(await mp.locator('.daily-analysis tbody tr').count(),14);
   await mp.screenshot({path:'artifacts/analysis-chinese-'+engine+'.png',fullPage:true});
   await pp.locator('.mobile-nav').getByRole('button',{name:'設定',exact:true}).click();assert.equal(await pp.locator('#goal-low').count(),0);await pp.getByRole('button',{name:'閉じる',exact:true}).click();
