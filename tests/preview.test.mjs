@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {createPreviewSession} from '../lib/preview.ts';
+import {dayKey} from '../lib/model.ts';
+test('sample sessions keep mutations isolated and support records, weight and conflicts',()=>{
+ const session=createPreviewSession(),other=createPreviewSession(),initial=session.request('state');
+ const feed={id:randomUUID(),kind:'milk',at:new Date().toISOString(),ml:120,note:''};
+ session.request('records','POST',feed);
+ session.request(`records/${feed.id}`,'PATCH',{...feed,ml:130,version:1});
+ assert.equal(session.request('state').records.find(r=>r.id===feed.id).ml,130);
+ assert.equal(other.request('state').records.some(r=>r.id===feed.id),false);
+ assert.throws(()=>session.request(`records/${feed.id}`,'PATCH',{...feed,version:1}),/CONFLICT/);
+ assert.throws(()=>session.request('records','POST',{...feed,id:randomUUID(),ml:-1}),/INVALID_INPUT/);
+ const weight={id:randomUUID(),day:dayKey(),grams:4500,note:''};
+ session.request('weights','POST',weight);
+ assert.throws(()=>session.request('weights','POST',{...weight,id:randomUUID()}),/WEIGHT_DAY_EXISTS/);
+ session.request(`weights/${weight.id}`,'PATCH',{...weight,grams:4510,version:1});
+ session.request(`weights/${weight.id}`,'DELETE',{version:2});
+ assert.equal(session.request('state').weights.some(w=>w.day===weight.day),false);
+ const snapshot=session.request('state');snapshot.records.length=0;
+ assert.ok(session.request('state').records.length>0,'Returned snapshots cannot mutate the session');
+ session.request(`records/${feed.id}`,'DELETE',{version:2});
+ assert.equal(session.request('state').records.length,initial.records.length);
+ assert.throws(()=>session.request('admin/families','POST',{name:'test'}),/FORBIDDEN/);
+});

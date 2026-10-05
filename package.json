@@ -17,7 +17,9 @@
     "test:integration": "node tests/integration.mjs",
     "test:rhythm-ui": "node --experimental-strip-types tests/rhythm-ui.mjs",
     "test:weight-ui": "node --experimental-strip-types tests/weight-ui.mjs",
-    "test:weight-api": "node --experimental-strip-types tests/weight-api.mjs"
+    "test:weight-api": "node --experimental-strip-types tests/weight-api.mjs",
+    "test:uiux": "node tests/uiux.mjs",
+    "test:preview-ui": "node tests/preview-ui.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

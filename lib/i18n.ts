@@ -1,5 +1,8 @@
 import type { Language } from './types';
 const words = {
+  previewStart: ['サンプルで試す','试用示例'], previewHint: ['ログイン不要。サンプルで記録・編集を試せます。変更は画面を閉じると消えます。','无需登录，可使用示例记录和编辑。关闭页面后更改会消失。'], previewMode: ['テストプレビュー','示例预览'], previewSessionHint: ['サンプルデータ・クラウドには保存しません','示例数据，不保存到云端'], previewExit: ['プレビューを終了','退出预览'], previewReset: ['サンプルをリセット','重置示例'],
+  milkAmountShort: ['ミルク量','瓶喂量'],
+  homeTab: ['今日','今天'], history: ['履歴','记录'], analysisTab: ['分析','分析'], historyFilter: ['記録の種類','记录类型'], diaper: ['おむつ','尿布'], backToday: ['今日に戻る','返回今天'], dayWeight: ['当日の体重','当日体重'], todayWeightPrompt: ['今日の体重を記録する','记录今天的体重'], historyEmpty: ['この日の記録はありません','当天没有记录'], historyEmptyHint: ['上のボタンから、この日の記録を追加できます。','可以点击上方按钮添加当天的记录。'], feedHistoryLink: ['授乳の履歴を見る','查看喂奶记录'], previousFeed: ['前回','上次'], chartHelp: ['グラフの見方','图表说明'], profileSettings: ['赤ちゃん・家族の設定','宝宝与家庭设置'], backSettings: ['設定に戻る','返回设置'], todaySummary: ['今日のまとめ','今日汇总'],
   weight: ['体重','体重'], weightTitle: ['毎日の体重','每日体重'], addWeight: ['体重を記録','记录体重'], editWeight: ['体重を編集','编辑体重'], measurementDay: ['測定日','测量日期'],
   weightDailyHint: ['1日1件、測った体重を記録します。記録済みの日は編集して更新できます。','每天记录一次测量体重。已记录的日期可以编辑更新。'], weightUnitHint: ['グラムで入力（例：3.5 kg → 3500 g）','以克输入（例如：3.5 kg → 3500 g）'], weightNotePlaceholder: ['測った時間や服装など','测量时间、穿着等'],
   weightEmpty: ['この日の体重はまだ記録されていません。','当天尚未记录体重。'], weightChartEmpty: ['体重を記録すると、ここに推移を表示します。','记录体重后将在此显示变化。'], weightHistoryTitle: ['体重の推移','体重变化'], weightPrevious: ['前回 {day} から','较上次 {day}'], weightNoPrevious: ['前回の測定記録はありません','暂无上次测量记录'], weightChartNote: ['点は実測値です。測っていない日は補完しません。点や記録をタップして編集できます。','圆点代表实测值，未测量的日期不补值。点击圆点或记录可编辑。'], weightRange: ['{range}日','{range}天'], weightRecent: ['期間内の測定記録','期间测量记录'],

@@ -6,8 +6,9 @@ import { weightHistory } from '../lib/weight';
 import { text, type TextKey } from '../lib/i18n';
 
 const shortDate=(day:string)=>`${+day.slice(5,7)}/${+day.slice(8)}`;
-export function WeightTracker({records,day,lang,onEdit}:{records:WeightRecord[];day:string;lang:Language;onEdit:(record?:WeightRecord)=>void}) {
-  const [range,setRange]=useState(30);
+export function WeightTracker({records,day,lang,onEdit,range:externalRange,onRange}:{records:WeightRecord[];day:string;lang:Language;onEdit:(record?:WeightRecord)=>void;range?:number;onRange?:(range:number)=>void}) {
+  const [localRange,setLocalRange]=useState(30);
+  const range=externalRange??localRange, setRange=onRange??setLocalRange;
   const t=(key:TextKey)=>text(lang,key);
   const {selected,previous,rows,start}=weightHistory(records,day,range);
   const difference=selected&&previous?selected.grams-previous.grams:null;

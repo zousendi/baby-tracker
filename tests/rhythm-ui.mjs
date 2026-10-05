@@ -16,10 +16,12 @@ try {
   const state={user:{id:'u',username:'test',displayName:'test',familyId:'f'},family:{id:'f',name:'UI fixture',babyName:'テスト',birthday:'',goalLow:null,goalHigh:null,version:1},records:rows,serverTime:now};
   await page.route('**/api/**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify(state)}));
   await page.goto(base);await page.locator('.quick-record').waitFor();
-  assert.deepEqual(await page.locator('.feed-interval time').allTextContents(),['00:01','00:00']);
+  assert.equal(await page.locator('.feed-interval').count(),0);
   assert.equal(await page.locator('.cumulative-legend>div').count(),3);
   assert.deepEqual(await page.locator('.cumulative-legend strong').allTextContents(),['80 ml','100 ml','280 ml']);
   assert.equal(await page.locator('.cumulative-chart polyline').count(),3);
+  await page.getByRole('button',{name:'授乳の履歴を見る',exact:false}).click();
+  assert.deepEqual(await page.locator('.feed-interval time').allTextContents(),['00:01','00:00']);
   await page.locator('.feed-interval').first().click();
   for(const width of [320,390,768,1440]) {
     await page.setViewportSize({width,height:600});
@@ -32,7 +34,7 @@ try {
   }
   await page.setViewportSize({width:390,height:844});
   await page.getByRole('button',{name:'閉じる',exact:true}).click();
-  await page.locator('.mobile-nav').getByRole('button',{name:'ミルク分析',exact:true}).click();
+  await page.locator('.mobile-nav').getByRole('button',{name:'分析',exact:true}).click();
   await page.getByRole('combobox',{name:'対象',exact:true}).selectOption('expressed');
   assert.equal(await page.locator('.cumulative-chart polyline').count(),0);
   await page.getByRole('combobox',{name:'対象',exact:true}).selectOption('all');

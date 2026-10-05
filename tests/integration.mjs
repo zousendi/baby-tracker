@@ -31,10 +31,12 @@ try{
   const cookies=await papa.cookies();const session=cookies.find(c=>c.name==='komorebi_session');assert.ok(session?.httpOnly);if(engine==='edge')assert.equal(session.sameSite,'Lax'); // WebKit on Windows does not report this field reliably; the response header is checked above.
   await pp.locator('.quick.milk').click();await pp.locator('#record-at').fill(localInput(new Date(Date.now()-20*60000)));await pp.locator('#record-wake').fill(localInput(new Date(Date.now()-10*60000)));await pp.getByRole('button',{name:'140',exact:true}).click();await pp.getByRole('button',{name:'10ml増やす',exact:true}).click();await pp.locator('#record-note').fill(`test-${suffix} <script>no</script>`);await pp.getByRole('button',{name:'記録を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});
   const after=await getState(papa),record=after.records.find(r=>r.note.startsWith(`test-${suffix}`));assert.equal(record.ml,150);assert.ok(record.wakeAt);created.push(record.id);
+  await mp.locator('.mobile-nav').getByRole('button',{name:'履歴',exact:true}).click();
   await mp.getByRole('button',{name:'更新',exact:true}).click();await mp.locator('.record-row').filter({hasText:`test-${suffix}`}).waitFor();
   await mp.locator('.language-button').click();assert.equal(await mp.locator('html').getAttribute('lang'),'zh-CN');
   await mp.locator('.record-row').filter({hasText:`test-${suffix}`}).click();await mp.locator('#record-ml').fill('160');await mp.getByRole('button',{name:'保存修改',exact:true}).click();await mp.locator('dialog').waitFor({state:'detached'});
   assert.equal((await getState(papa)).records.find(r=>r.id===record.id).ml,160);assert.equal((await getState(papa)).records.find(r=>r.id===record.id).wakeAt,record.wakeAt);
+  await pp.locator('.mobile-nav').getByRole('button',{name:'履歴',exact:true}).click();
   await pp.getByRole('button',{name:'更新',exact:true}).click();
   const stale=await papa.request.patch(`${base}/api/records/${record.id}`,{headers,data:{...record,ml:170}});assert.equal(stale.status(),409);
   const csrf=await papa.request.post(`${base}/api/records`,{data:{...record,id:randomUUID()}});assert.equal(csrf.status(),403);
@@ -51,9 +53,9 @@ try{
   for(const width of [320,390,768,1440]){await pp.setViewportSize({width,height:900});assert.ok(await pp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`No overflow at ${width}`);}
   await pp.screenshot({path:`artifacts/desktop-${engine}.png`,fullPage:true});
   await pp.setViewportSize({width:390,height:844});
-  await pp.locator('.mobile-nav').getByRole('button',{name:'ミルク分析',exact:true}).click();
+  await pp.locator('.mobile-nav').getByRole('button',{name:'分析',exact:true}).click();
   for(const range of [7,14,30]){await pp.getByRole('button',{name:range+'日間',exact:true}).click();assert.equal(await pp.locator('.daily-analysis tbody tr').count(),range);}
-  assert.ok(await pp.locator('.wake-result').count());
+  assert.equal(await pp.locator('.feed-interval').count(),0);
   await pp.getByRole('combobox',{name:'対象',exact:true}).selectOption('expressed');
   assert.equal(await pp.locator('.rhythm-dot').count(),0);
   await pp.getByRole('combobox',{name:'対象',exact:true}).selectOption('all');
@@ -61,9 +63,11 @@ try{
   await pp.screenshot({path:'artifacts/analysis-desktop-'+engine+'.png',fullPage:true});
   await pp.setViewportSize({width:390,height:844});await pp.getByRole('button',{name:'7日間',exact:true}).click();
   await pp.screenshot({path:'artifacts/analysis-mobile-'+engine+'.png',fullPage:true});
+  await pp.locator('.mobile-nav').getByRole('button',{name:'履歴',exact:true}).click();
+  await pp.locator('.filter-row').getByRole('button',{name:'授乳',exact:true}).click();
   const rhythmTimes=await pp.locator('.feed-interval time').allTextContents();
   assert.deepEqual(rhythmTimes,[...rhythmTimes].sort().reverse(),'Rhythm log is newest first');
-  assert.equal(await pp.locator('.cumulative-legend>div').count(),3);
+  assert.ok(await pp.locator('.wake-result').count());
   await pp.locator('.feed-interval').first().click();
   for(const width of [320,390,768,1440]){
     await pp.setViewportSize({width,height:600});
@@ -73,10 +77,10 @@ try{
     assert.equal(await pp.locator('dialog').evaluate(d=>d.scrollLeft),0);
     assert.ok(await pp.locator('dialog').evaluate(d=>d.scrollTop>0),'Editor still scrolls vertically');
   }
-  await pp.setViewportSize({width:390,height:844});await pp.getByRole('button',{name:'変更を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});assert.equal(await pp.locator('.analysis-controls').count(),1);
-  await mp.locator('.mobile-nav').getByRole('button',{name:'奶量分析',exact:true}).click();await mp.getByRole('button',{name:'14天',exact:true}).click();assert.equal(await mp.locator('.daily-analysis tbody tr').count(),14);
+  await pp.setViewportSize({width:390,height:844});await pp.getByRole('button',{name:'変更を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});assert.equal(await pp.locator('.history-panel').count(),1);
+  await mp.locator('.mobile-nav').getByRole('button',{name:'分析',exact:true}).click();await mp.getByRole('button',{name:'14天',exact:true}).click();assert.equal(await mp.locator('.daily-analysis tbody tr').count(),14);
   await mp.screenshot({path:'artifacts/analysis-chinese-'+engine+'.png',fullPage:true});
-  await pp.locator('.mobile-nav').getByRole('button',{name:'設定',exact:true}).click();assert.equal(await pp.locator('#goal-low').count(),0);await pp.getByRole('button',{name:'閉じる',exact:true}).click();
+  await pp.locator('.mobile-nav').getByRole('button',{name:'設定',exact:true}).click();await pp.getByRole('button',{name:'赤ちゃん・家族の設定',exact:true}).click();assert.equal(await pp.locator('#goal-low').count(),0);await pp.getByRole('button',{name:'閉じる',exact:true}).click();
   const wakeInvalid=await papa.request.post(base+'/api/records',{headers,data:{...record,id:randomUUID(),wakeAt:new Date(Date.now()+86400000).toISOString()}});assert.equal(wakeInvalid.status(),400);
   const wakeBefore=await papa.request.post(base+'/api/records',{headers,data:{...record,id:randomUUID(),wakeAt:new Date(+new Date(record.at)-60000).toISOString()}});assert.equal(wakeBefore.status(),400);
   otherFamily=await management('families','POST',{name:`test-${suffix}`});
