@@ -1,17 +1,19 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Leaf, Milk, Droplets, Circle, Clock, BarChart3, Heart, Settings, Plus, ChevronLeft, ChevronRight, LogOut, RefreshCw, CalendarDays, Users, History, Scale, Download } from 'lucide-react';
+import { Leaf, Milk, Droplets, Circle, Clock, BarChart3, Heart, Settings, Plus, ChevronLeft, ChevronRight, LogOut, RefreshCw, CalendarDays, Users, History, Scale, Download, Moon, Sun } from 'lucide-react';
 import type { AppState, Kind, Language, RecordItem, WeightRecord } from '../lib/types';
 import { text, errorText, type TextKey } from '../lib/i18n';
 import { api, RequestError, beginPreview, endPreview } from '../lib/client';
 import { dayKey, shiftDay, recordsForDay, summarize, time, type AnalysisRange, type MilkFilter } from '../lib/model';
 import { DayRhythm, MilkAnalysis } from './milk-analysis';
 import { RecordEditor, ProfileEditor, WeightEditor } from './editors';
+import { sleepTimeline } from '../lib/sleep';
+import { SleepAnalysis } from './sleep-analysis';
 import { WeightTracker } from './weight-tracker';
 import { HistoryPanel, type HistoryFilter } from './history-panel';
 
 export const kindKey = (r: Pick<RecordItem,'kind'|'milkType'>): TextKey => r.kind === 'milk' && r.milkType === 'expressed' ? 'expressed' : r.kind;
-const kindIcon = { milk: Milk, breast: Heart, pee: Droplets, poop: Circle, both: Droplets };
+const kindIcon = { milk: Milk, breast: Heart, pee: Droplets, poop: Circle, both: Droplets, sleep: Moon, wake: Sun };
 export default function BabyApp() {
   const [lang,setLang] = useState<Language>('ja');
   const [state,setState] = useState<AppState|null>(null);
@@ -21,7 +23,10 @@ export default function BabyApp() {
   const [busy,setBusy] = useState(false), [view,setView] = useState('today');
   const [analysisRange,setAnalysisRange]=useState<AnalysisRange>(7), [milkType,setMilkType]=useState<MilkFilter>('all');
   const [historyDay,setHistoryDay]=useState(dayKey()), [analysisDay,setAnalysisDay]=useState(dayKey());
-  const [filter,setFilter]=useState<HistoryFilter>('all'), [analysisType,setAnalysisType]=useState<'milk'|'weight'>('milk');
+  const [filter,setFilter]=useState<HistoryFilter>('all'), [analysisType,setAnalysisType]=useState<'milk'|'weight'|'sleep'>('milk');
+  const [sleepRange,setSleepRange]=useState(7);
+  const sleepLock=useRef(false);
+  const [sleepBusy,setSleepBusy]=useState(false),[sleepError,setSleepError]=useState('');
   const [weightRange,setWeightRange]=useState(30);
   const [now,setNow]=useState(Date.now), [guide,setGuide]=useState(false);
   const [scrollPositions,setScrollPositions]=useState<Record<string,number>>({});
@@ -52,7 +57,7 @@ export default function BabyApp() {
       if (propagate) throw e;
     } finally { if (sequence === loadSeq.current) { setLoading(false); setSyncing(false); } }
   },[]);
-  const startDemo=useCallback(()=>{++loadSeq.current;setState(beginPreview());setPreview(true);setLoading(false);setSyncing(false);setError('');setLoginError('');setView('today');setGuide(false);setEditor(null);setWeightEditor(null);setSettings(false);setNotice(null);setNow(Date.now());setHistoryDay(dayKey());setAnalysisDay(dayKey());setFilter('all');setScrollPositions({});},[]);
+  const startDemo=useCallback(()=>{++loadSeq.current;setSleepError('');setState(beginPreview());setPreview(true);setLoading(false);setSyncing(false);setError('');setLoginError('');setView('today');setGuide(false);setEditor(null);setWeightEditor(null);setSettings(false);setNotice(null);setNow(Date.now());setHistoryDay(dayKey());setAnalysisDay(dayKey());setFilter('all');setScrollPositions({});},[]);
   useEffect(() => { const sequence=loadSeq;queueMicrotask(()=>{if(new URLSearchParams(window.location.search).get('preview')==='1')startDemo();else void refresh();}); return () => { ++sequence.current; }; },[refresh,startDemo]);
   useEffect(() => {
     const context = (document as Document & {modelContext?:{registerTool:(tool:unknown,options:{signal:AbortSignal})=>unknown}}).modelContext;
@@ -79,11 +84,18 @@ export default function BabyApp() {
   async function logout(){setBusy(true);try{if(preview){endPreview();setPreview(false);const url=new URL(window.location.href);url.searchParams.delete('preview');window.history.replaceState(null,'',url.pathname+url.search+url.hash);}else await api('logout','POST',{});loadSeq.current++;setState(null);setEditor(null);setWeightEditor(null);setSettings(false);setError('');}catch(e){setError(e instanceof RequestError?e.code:'requestFailed');}finally{setBusy(false);}}
   if (loading) return <main className="login-page"><div className="loading-card"><Leaf size={38}/><p>{t('loading')}</p></div></main>;
   if (!state) return <main className="login-page"><div className="login-card"><div className="login-top"><span className="brand"><Leaf/>こもれび</span>{languageButton}</div><p className="eyebrow">OUR FAMILY JOURNAL</p><h1>{t('loginTitle')}</h1><p className="muted">{t('loginHint')}</p>{(loginError||error)&&<p className="error-box" role="alert">{errorText(lang,loginError||error)}</p>}<form method="post" onSubmit={login}><label>{t('username')}<input name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={40} required/></label><label>{t('password')}<input name="password" type="password" autoComplete="current-password" maxLength={128} required/></label><button className="primary-button" disabled={busy} type="submit">{busy?t('loading'):t('login')}</button></form><p className="login-note">{t('loginNote')}</p><section className="preview-entry"><button type="button" className="subtle-button" disabled={busy} onClick={startDemo}><BarChart3 size={18}/>{t('previewStart')}</button><p>{t('previewHint')}</p></section></div></main>;
+  const sleep=sleepTimeline(state.records,now);
   const today=dayKey(now), weights=state.weights??[];
   const records=recordsForDay(state.records,today), s=summarize(records);
   const last=state.records.filter(r=>(r.kind==='milk'||r.kind==='breast')&&+new Date(r.at)<=now).slice().sort((a,b)=>+new Date(b.at)-+new Date(a.at))[0];
   const duration=(n:number)=>n>=1440?`${Math.floor(n/1440)}${t('days')} ${Math.floor(n%1440/60)}${t('hours')}`:n>=60?`${Math.floor(n/60)}${t('hours')}${n%60?`${n%60}${t('minutes')}`:''}`:`${n}${t('minutes')}`;
 
+  async function quickSleep(kind:'sleep'|'wake'){
+    if(sleepLock.current)return;sleepLock.current=true;setSleepBusy(true);setSleepError('');
+    try{await api('records','POST',{id:crypto.randomUUID(),kind,at:new Date().toISOString(),note:'',quickSleep:true,expectedSleepId:sleep.latest?.id??''});setNow(Date.now());await refresh();notify('sleepSaved');}
+    catch(e){setSleepError(e instanceof RequestError?e.code:'requestFailed');if(e instanceof RequestError&&e.code==='SLEEP_CONFLICT')await refresh();}
+    finally{sleepLock.current=false;setSleepBusy(false);}
+  }
   const openRecord=(kind:Kind,record?:RecordItem,selectedDay=today)=>setEditor({kind,record,selectedDay});
   const openWeight=(record?:WeightRecord,selectedDay=today)=>setWeightEditor({record,selectedDay});
   const navigation= ([['today',CalendarDays,'homeTab'],['history',History,'history'],['trends',BarChart3,'analysisTab'],['settings',Settings,'settings']] as const).map(([key,Icon,label])=><button key={key} className={`nav-item ${view===key?'active':''}`} aria-current={view===key?'page':undefined} onClick={()=>navigate(key)}><Icon size={21}/><span>{t(label)}</span></button>);
@@ -95,14 +107,15 @@ export default function BabyApp() {
     <div className="sync-bar"><span>{preview?t('previewSessionHint'):error?t('syncError'):syncing?t('syncing'):`${t('synced')} ${time(state.serverTime)}`}</span><button className="text-button" disabled={syncing} aria-label={t('refresh')} onClick={()=>void refresh()}><RefreshCw size={14}/></button></div>
     {error&&<div className="error-box" role="alert">{errorText(lang,error)} {t('staleHint')}</div>}
     {view==='today'&&<div className="today-view">
-      <section className="quick-record"><div className="quick-heading"><h2>{t('quick')}</h2><time>{today}</time></div><div className="quick-buttons">{(['milk','pee','poop'] as Kind[]).map(kind=>{const Icon=kindIcon[kind];return <button key={kind} className={`quick ${kind}`} onClick={()=>openRecord(kind)}><Icon/><span>{t(kind==='milk'?'feed':kind)}</span><Plus size={18}/></button>;})}</div></section>
+      <section className="quick-record"><div className="quick-heading"><h2>{t('quick')}</h2><time>{today}</time></div><div className="quick-buttons">{(['milk','pee','poop'] as Kind[]).map(kind=>{const Icon=kindIcon[kind];return <button key={kind} className={`quick ${kind}`} onClick={()=>openRecord(kind)}><Icon/><span>{t(kind==='milk'?'feed':kind)}</span><Plus size={18}/></button>;})}</div>
+      <section className="sleep-quick" aria-label={t('sleepFilter')}><div className="sleep-status"><Moon size={22}/><div><h3>{t(sleep.ongoing?'sleeping':sleep.latest?'awake':'sleepUnknown')}</h3><p>{sleep.latest?`${t(sleep.ongoing?'sleepSince':'wakeSince')} ${dayKey(sleep.latest.at)===today?'':dayKey(sleep.latest.at)+' '}${time(sleep.latest.at)}`:t('sleepQuickHint')}</p></div>{sleep.ongoing&&<strong>{duration(Math.max(0,Math.floor((now-+new Date(sleep.ongoing.at))/60000)))}</strong>}</div><div className="sleep-actions"><button className="quick sleep" disabled={sleepBusy||sleep.latest?.kind==='sleep'} onClick={()=>void quickSleep('sleep')}><Moon/><span>{t('sleep')}</span></button><button className="quick wake" disabled={sleepBusy||sleep.latest?.kind==='wake'} onClick={()=>void quickSleep('wake')}><Sun/><span>{t('wake')}</span></button></div><div className="sleep-quick-footer"><p>{t('sleepQuickHint')}</p><button className="text-button" onClick={()=>{setHistoryDay(today);setFilter('sleep');navigate('history');}}>{t('sleepHistory')} →</button></div>{sleepError&&<p role="alert" className="error-box">{errorText(lang,sleepError)}</p>}</section></section>
       <article className="last-feed card"><div><h3><Clock size={18}/>{t('lastFeed')}</h3><strong data-testid="last-feed-elapsed">{last?duration(Math.max(0,Math.floor((now-+new Date(last.at))/60000))):t('noRecord')}</strong></div><p>{last?`${t('previousFeed')} ${dayKey(last.at)===today?'':dayKey(last.at)+' '}${time(last.at)} ／ ${last.kind==='milk'?`${last.ml} ml`:`${last.left+last.right} ${t('minutes')}`}`:t('emptyHint')}</p></article>
       {!weights.some(w=>w.day===today)&&<button className="weight-reminder" onClick={()=>openWeight()}><Scale size={19}/><span>{t('todayWeightPrompt')}</span><Plus size={18}/></button>}
       <section className="today-summary" aria-label={t('todaySummary')}><h2>{t('todaySummary')}</h2><div className="compact-summary">{([['milkAmountShort',Milk,s.ml,'ml','milk-total'],['totalFeeds',Clock,s.feeds,t('times'),'feed-total'],['pee',Droplets,s.pee,t('times'),'pee-total'],['poop',Circle,s.poop,t('times'),'poop-total']] as const).map(([label,Icon,value,unit,testid])=><article key={label}><span><Icon size={16}/>{t(label)}</span><strong data-testid={testid}>{value}<small>{unit}</small></strong></article>)}</div></section>
       <DayRhythm records={state.records} day={today} lang={lang} onEdit={r=>openRecord(r.kind,r)} onHistory={feedHistory}/>
     </div>}
     {view==='history'&&<><div className="page-heading"><h1>{t('history')}</h1>{dateControl(historyDay,setHistoryDay)}</div><HistoryPanel records={state.records} weights={weights} day={historyDay} lang={lang} now={now} filter={filter} onFilter={setFilter} onEdit={r=>openRecord(r.kind,r,historyDay)} onWeight={r=>openWeight(r,historyDay)} onAdd={kind=>openRecord(kind,undefined,historyDay)}/></>}
-    {view==='trends'&&<><div className="page-heading"><h1>{t('analysisTab')}</h1>{dateControl(analysisDay,setAnalysisDay)}</div><div className="analysis-switch segmented" aria-label={t('analysisTab')}>{(['milk','weight'] as const).map(type=><button key={type} className={analysisType===type?'selected':''} aria-pressed={analysisType===type} onClick={()=>setAnalysisType(type)}>{t(type)}</button>)}</div><div hidden={analysisType!=='milk'}><MilkAnalysis records={state.records} day={analysisDay} lang={lang} range={analysisRange} milkType={milkType} onRange={setAnalysisRange} onType={setMilkType} onDay={setAnalysisDay} onEdit={r=>openRecord(r.kind,r,analysisDay)}/></div><div hidden={analysisType!=='weight'}><WeightTracker records={weights} day={analysisDay} lang={lang} range={weightRange} onRange={setWeightRange} onEdit={r=>openWeight(r,analysisDay)}/></div></>}
+    {view==='trends'&&<><div className="page-heading"><h1>{t('analysisTab')}</h1>{dateControl(analysisDay,setAnalysisDay)}</div><div className="analysis-switch segmented" aria-label={t('analysisTab')}>{(['milk','sleep','weight'] as const).map(type=><button key={type} className={analysisType===type?'selected':''} aria-pressed={analysisType===type} onClick={()=>setAnalysisType(type)}>{t(type==='sleep'?'sleepFilter':type)}</button>)}</div><div hidden={analysisType!=='milk'}><MilkAnalysis records={state.records} day={analysisDay} lang={lang} range={analysisRange} milkType={milkType} onRange={setAnalysisRange} onType={setMilkType} onDay={setAnalysisDay} onEdit={r=>openRecord(r.kind,r,analysisDay)}/></div><div hidden={analysisType!=='sleep'}><SleepAnalysis records={state.records} day={analysisDay} lang={lang} range={sleepRange} onRange={setSleepRange} onDay={setAnalysisDay} now={now} onEdit={r=>openRecord(r.kind,r,analysisDay)}/></div><div hidden={analysisType!=='weight'}><WeightTracker records={weights} day={analysisDay} lang={lang} range={weightRange} onRange={setWeightRange} onEdit={r=>openWeight(r,analysisDay)}/></div></>}
     {view==='settings'&&<><div className="page-heading"><h1>{t(guide?'guide':'settings')}</h1>{guide&&<button className="text-button" onClick={()=>setGuide(false)}><ChevronLeft size={16}/>{t('backSettings')}</button>}</div>{!guide&&<article className="card settings-menu"><p>{state.family.name} · {state.user.displayName}</p><button onClick={()=>setSettings(true)}><Users size={21}/>{t('profileSettings')}<ChevronRight size={18}/></button><button onClick={()=>setLang(lang==='ja'?'zh':'ja')}><span className="language-symbol">文</span>{t('language')}<small>{lang==='ja'?'日本語':'中文'}</small></button><button onClick={exportRecords}><Download size={21}/>{t('export')}<ChevronRight size={18}/></button><button onClick={()=>setGuide(true)}><Heart size={21}/>{t('guide')}<ChevronRight size={18}/></button><button disabled={busy} onClick={logout}><LogOut size={21}/>{t('logout')}</button></article>}
 {guide&&<><article className="guide-intro card"><Heart size={32}/><p>{t('guideIntro')}</p></article><div className="guide-grid">{([['cuesTitle','cues',Milk],['diapersTitle','diapers',Droplets],['adviceTitle','advice',Heart],['analysisGuideTitle','analysisGuide',BarChart3]] as const).map(([title,body,Icon])=><article className="card guide-card" key={title}><Icon size={25}/><h2>{t(title)}</h2><p>{t(body)}</p></article>)}</div><div className="sources"><h3>{t('sources')}</h3><a href="https://www.nhs.uk/baby/breastfeeding-and-bottle-feeding/breastfeeding-problems/enough-milk/" target="_blank" rel="noreferrer">NHS — Is my baby getting enough milk?</a><a href="https://www.nhs.uk/best-start-in-life/baby/feeding-your-baby/bottle-feeding/bottle-feeding-your-baby/" target="_blank" rel="noreferrer">NHS — Bottle feeding your baby</a></div></>}
     </>}

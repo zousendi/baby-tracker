@@ -29,8 +29,8 @@ try{
   const before=await getState(papa);assert.equal(before.family.name,useProvisioned?'ゆうさくくん':`Test analysis ${suffix}`);assert.equal((await getState(mama)).user.familyId,before.user.familyId);
   assert.equal(Object.keys(await pp.evaluate(()=>({...localStorage}))).join(','),'komorebi-language');
   const cookies=await papa.cookies();const session=cookies.find(c=>c.name==='komorebi_session');assert.ok(session?.httpOnly);if(engine==='edge')assert.equal(session.sameSite,'Lax'); // WebKit on Windows does not report this field reliably; the response header is checked above.
-  await pp.locator('.quick.milk').click();await pp.locator('#record-at').fill(localInput(new Date(Date.now()-20*60000)));await pp.locator('#record-wake').fill(localInput(new Date(Date.now()-10*60000)));await pp.getByRole('button',{name:'140',exact:true}).click();await pp.getByRole('button',{name:'10ml増やす',exact:true}).click();await pp.locator('#record-note').fill(`test-${suffix} <script>no</script>`);await pp.getByRole('button',{name:'記録を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});
-  const after=await getState(papa),record=after.records.find(r=>r.note.startsWith(`test-${suffix}`));assert.equal(record.ml,150);assert.ok(record.wakeAt);created.push(record.id);
+  await pp.locator('.quick.milk').click();await pp.locator('#record-at').fill(localInput(new Date(Date.now()-20*60000)));await pp.getByRole('button',{name:'140',exact:true}).click();await pp.getByRole('button',{name:'10ml増やす',exact:true}).click();await pp.locator('#record-note').fill(`test-${suffix} <script>no</script>`);await pp.getByRole('button',{name:'記録を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});
+  const after=await getState(papa),record=after.records.find(r=>r.note.startsWith(`test-${suffix}`));assert.equal(record.ml,150);assert.equal(record.wakeAt,null);created.push(record.id);
   await mp.locator('.mobile-nav').getByRole('button',{name:'履歴',exact:true}).click();
   await mp.getByRole('button',{name:'更新',exact:true}).click();await mp.locator('.record-row').filter({hasText:`test-${suffix}`}).waitFor();
   await mp.locator('.language-button').click();assert.equal(await mp.locator('html').getAttribute('lang'),'zh-CN');
@@ -67,7 +67,7 @@ try{
   await pp.locator('.filter-row').getByRole('button',{name:'授乳',exact:true}).click();
   const rhythmTimes=await pp.locator('.feed-interval time').allTextContents();
   assert.deepEqual(rhythmTimes,[...rhythmTimes].sort().reverse(),'Rhythm log is newest first');
-  assert.ok(await pp.locator('.wake-result').count());
+  assert.equal(await pp.locator('.wake-result').count(),0);
   await pp.locator('.feed-interval').first().click();
   for(const width of [320,390,768,1440]){
     await pp.setViewportSize({width,height:600});
@@ -81,8 +81,6 @@ try{
   await mp.locator('.mobile-nav').getByRole('button',{name:'分析',exact:true}).click();await mp.getByRole('button',{name:'14天',exact:true}).click();assert.equal(await mp.locator('.daily-analysis tbody tr').count(),14);
   await mp.screenshot({path:'artifacts/analysis-chinese-'+engine+'.png',fullPage:true});
   await pp.locator('.mobile-nav').getByRole('button',{name:'設定',exact:true}).click();await pp.getByRole('button',{name:'赤ちゃん・家族の設定',exact:true}).click();assert.equal(await pp.locator('#goal-low').count(),0);await pp.getByRole('button',{name:'閉じる',exact:true}).click();
-  const wakeInvalid=await papa.request.post(base+'/api/records',{headers,data:{...record,id:randomUUID(),wakeAt:new Date(Date.now()+86400000).toISOString()}});assert.equal(wakeInvalid.status(),400);
-  const wakeBefore=await papa.request.post(base+'/api/records',{headers,data:{...record,id:randomUUID(),wakeAt:new Date(+new Date(record.at)-60000).toISOString()}});assert.equal(wakeBefore.status(),400);
   otherFamily=await management('families','POST',{name:`test-${suffix}`});
   const stranger=await management('users','POST',{familyId:otherFamily.id,username:`test_${suffix}`,displayName:'Test outsider',password:randomUUID()});
   // Reset the isolated account to a known ephemeral value, then exercise its permissions.
@@ -102,7 +100,7 @@ try{
   assert.deepEqual(errors,[]);
   // Delete only the records this test created, through the same scoped API.
   const final=await getState(mama);for(const id of created){const r=final.records.find(r=>r.id===id);if(r)assert.equal((await mama.request.delete(`${base}/api/records/${id}`,{headers,data:{version:r.version}})).status(),200);}
-  console.log(`${engine}: PASS milk analysis, wake persistence, removed goals, login, shared persistence, bilingual UI, mobile layout, edits, conflicts, family isolation, CSRF, invalid input, admin gate, account disabling and logout.`);
+  console.log(`${engine}: PASS milk analysis, legacy wake UI removal, removed goals, login, shared persistence, bilingual UI, mobile layout, edits, conflicts, family isolation, CSRF, invalid input, admin gate, account disabling and logout.`);
 }finally{
   const cleanupContext=browser.contexts()[1];
   if(cleanupContext){const response=await cleanupContext.request.get(`${base}/api/state`);if(response.ok()){const snapshot=await response.json();for(const r of snapshot.records.filter(r=>created.includes(r.id))){await cleanupContext.request.delete(`${base}/api/records/${r.id}`,{headers,data:{version:r.version}});}}}

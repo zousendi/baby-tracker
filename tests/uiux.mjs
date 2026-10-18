@@ -38,7 +38,7 @@ try{
  await tab('履歴').click();await page.getByRole('button',{name:'前の日',exact:true}).click();
  await expect(page.locator('.date-control input')).toHaveValue('2026-10-04');
  await page.locator('.filter-row').getByRole('button',{name:'授乳',exact:true}).click();
- await expect(page.locator('.record-row')).toHaveCount(1);await expect(page.locator('.history-interval')).toContainText('9時間');await expect(page.locator('.wake-result')).toContainText('1時間');
+ await expect(page.locator('.record-row')).toHaveCount(1);await expect(page.locator('.history-interval')).toContainText('9時間');await expect(page.locator('.wake-result')).toHaveCount(0);
  await page.locator('.history-add').getByRole('button',{name:'授乳',exact:true}).click();await expect(page.locator('#record-at')).toHaveValue('2026-10-04T12:00');await page.getByRole('button',{name:'閉じる',exact:true}).click();
  await tab('今日').click();await expect(page.locator('.quick-heading time')).toHaveText('2026-10-05');
  await page.locator('.quick.milk').click();await expect(page.locator('#record-at')).toHaveValue('2026-10-05T11:00');

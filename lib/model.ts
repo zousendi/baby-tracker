@@ -38,7 +38,7 @@ export function cumulativeMilk(records: RecordItem[], day: string, milkType: Mil
   });
 }
 export type AnalysisRange = 7 | 14 | 30;
-export type MilkEvent = RecordItem & { next: RecordItem | null; gap: number | null; wakeGap: number | null };
+export type MilkEvent = RecordItem & { next: RecordItem | null; gap: number | null };
 export function median(values: (number | null)[]) {
   const sorted = values.filter((n): n is number => n !== null && Number.isFinite(n)).sort((a,b)=>a-b);
   if (!sorted.length) return null;
@@ -52,10 +52,7 @@ export function milkEvents(records: RecordItem[], now = new Date()): MilkEvent[]
   return feeds.flatMap((r,i) => {
     if (r.kind!=='milk') return [];
     const next = feeds[i+1] || null;
-    const wake = r.wakeAt ? +new Date(r.wakeAt) : NaN;
-    const validWake = Number.isFinite(wake) && wake>=+new Date(r.at) && wake<=+now && (!next||wake<=+new Date(next.at));
-    return [{...r,next,gap:next?Math.round((+new Date(next.at)-+new Date(r.at))/60000):null,
-      wakeGap:validWake?Math.round((wake-+new Date(r.at))/60000):null}];
+    return [{...r,next,gap:next?Math.round((+new Date(next.at)-+new Date(r.at))/60000):null}];
   });
 }
 export function analyzeMilk(records: RecordItem[], endDay: string, range: AnalysisRange=7, milkType: MilkFilter='all', now=new Date()) {
@@ -77,8 +74,7 @@ export function analyzeMilk(records: RecordItem[], endDay: string, range: Analys
   const groups=([[1,79],[80,119],[120,159],[160,199],[200,1000]] as const).map(([low,high])=>{
     const rows=recent.filter(r=>r.ml>=low&&r.ml<=high);
     const gaps=rows.map(r=>r.gap).filter((n):n is number=>n!==null);
-    const wakes=rows.map(r=>r.wakeGap).filter((n):n is number=>n!==null);
-    return {low,high,count:gaps.length,gap:median(gaps),min:gaps.length?Math.min(...gaps):null,max:gaps.length?Math.max(...gaps):null,wake:median(wakes),wakeCount:wakes.length};
+    return {low,high,count:gaps.length,gap:median(gaps),min:gaps.length?Math.min(...gaps):null,max:gaps.length?Math.max(...gaps):null};
   });
   return {selected,recent,days,groups,baselineDays:baseline.length,
     total:selected.length?selected.reduce((sum,r)=>sum+r.ml,0):null,baselineTotal:average(baseline.map(d=>d.total)),

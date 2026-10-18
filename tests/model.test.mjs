@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dayKey, localInput, recordsForDay, summarize, goal, shiftDay, analyzeMilk, milkEvents, median, cumulativeMilk } from '../lib/model.ts';
-import { normalizeWakeAt } from '../lib/record-wake.ts';
 const record=(kind,at,extra={})=>({id:'id',kind,at,ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'papa',updatedAt:0,...extra});
 test('cumulative milk uses Japan dates, steps, same-clock comparison and stops today at now',()=>{
   const rows=[record('milk','2026-09-30T15:00:00Z',{ml:50}),record('milk','2026-10-01T08:00+09:00',{ml:100}),record('milk','2026-10-01T18:00+09:00',{ml:200}),record('milk','2026-10-02T08:00+09:00',{ml:80,milkType:'expressed'}),record('milk','2026-10-03T12:00+09:00',{ml:120}),record('breast','2026-10-03T09:00+09:00',{left:10}),record('milk','2026-10-03T13:00+09:00',{ml:999})];
@@ -65,20 +64,13 @@ test('today compares same-clock totals, excludes missing days, and keeps per-fee
   assert.equal(past.gap, 840);
 });
 
-test('amount grouping uses completed intervals and valid explicitly-recorded wakes only', () => {
+test('amount grouping uses completed feeding intervals and ignores legacy wake timestamps', () => {
   const rows = [record('milk', '2026-10-01T01:00+09:00', { ml: 79, wakeAt: '2026-10-01T02:00+09:00' }), record('milk', '2026-10-01T03:00+09:00', { ml: 80, milkType: 'expressed', wakeAt: '2026-10-01T07:00+09:00' }), record('milk', '2026-10-01T06:00+09:00', { ml: 120 })];
   const now = new Date('2026-10-01T12:00+09:00');
   const a = analyzeMilk(rows, '2026-10-01', 7, 'all', now);
   assert.deepEqual(a.groups.map(g => g.count), [1, 1, 0, 0, 0]);
-  assert.equal(a.groups[0].wake, 60);
-  assert.equal(a.groups[1].wake, null);
   const filtered = analyzeMilk(rows, '2026-10-01', 7, 'formula', now);
   assert.equal(filtered.total, 199);
   assert.equal(filtered.selected[0].gap, 120);
   assert.equal(filtered.groups[1].count, 0);
-  assert.throws(()=>normalizeWakeAt('milk',rows[0].at,'2026-09-30T23:00+09:00',+now));
-  assert.throws(()=>normalizeWakeAt('milk',rows[0].at,'2026-10-02T02:00+09:00',+now));
-  assert.equal(normalizeWakeAt('milk',rows[0].at,rows[0].wakeAt,+now),new Date(rows[0].wakeAt).toISOString());
-  assert.equal(normalizeWakeAt('milk',rows[0].at,undefined,+now),null);
-  assert.equal(normalizeWakeAt('breast',rows[0].at,rows[0].wakeAt,+now),null);
 });

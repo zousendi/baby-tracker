@@ -1,7 +1,7 @@
 import type { AppState, RecordItem, WeightRecord } from './types';
 import { dayKey, shiftDay } from './model.ts';
 import { validateWeight } from './weight.ts';
-import { normalizeWakeAt } from './record-wake.ts';
+import { sleepTimeline } from './sleep.ts';
 
 export class PreviewError extends Error {
   code:string;
@@ -18,14 +18,13 @@ function note(value:unknown){
 }
 function recordInput(value:Record<string,unknown>):Pick<RecordItem,'kind'|'at'|'ml'|'left'|'right'|'milkType'|'note'|'wakeAt'>{
   const kind=value.kind as RecordItem['kind'];
-  if(!['milk','breast','pee','poop','both'].includes(kind))throw new PreviewError('INVALID_INPUT');
+  if(!['milk','breast','pee','poop','both','sleep','wake'].includes(kind))throw new PreviewError('INVALID_INPUT');
   const date=typeof value.at==='string'?new Date(value.at):new Date(NaN);
   if(!Number.isFinite(+date)||+date>Date.now()+60000)throw new PreviewError('INVALID_TIME');
   const ml=kind==='milk'?integer(value.ml,1,1000):0;
   const left=kind==='breast'?integer(value.left,0,180):0,right=kind==='breast'?integer(value.right,0,180):0;
   if(kind==='breast'&&left+right===0)throw new PreviewError('INVALID_DURATION');
-  let wakeAt;
-  try{wakeAt=normalizeWakeAt(kind,date.toISOString(),value.wakeAt);}catch{throw new PreviewError('INVALID_WAKE_TIME');}
+  const wakeAt=null;
   return {kind,at:date.toISOString(),ml,left,right,milkType:value.milkType==='expressed'?'expressed':'formula',note:note(value.note??''),wakeAt};
 }
 
@@ -39,6 +38,13 @@ export function createPreviewSession(now=new Date()){
       if(+at>+now)continue;
       records.push({id:crypto.randomUUID(),kind:'milk',at:at.toISOString(),ml:ml+(offset%3)*10,left:0,right:0,milkType:hour===9?'expressed':'formula',note:'',wakeAt:null,version:1,author:'サンプル',updatedAt:+now});
       if(hour===5||hour===13||hour===21)records.push({id:crypto.randomUUID(),kind:hour===13?'both':'pee',at:new Date(+at+60000).toISOString(),ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'サンプル',updatedAt:+now});
+    }
+    for(const [hour,length] of [[0,4],[7,2],[12,2],[17,1],[21,2]]){
+      const start=+new Date(`${day}T${String(hour).padStart(2,'0')}:00:00+09:00`);
+      for(const [kind,stamp] of [['sleep',start],['wake',start+length*3600000]] as const){
+        if(stamp>+now)continue;
+        records.push({id:crypto.randomUUID(),kind,at:new Date(stamp).toISOString(),ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'サンプル',updatedAt:stamp});
+      }
     }
     if(offset<0)weights.push({id:crypto.randomUUID(),day,grams:4200+(offset+13)*25,note:'朝の測定',version:1,author:'サンプル',updatedAt:+now});
   }
@@ -78,6 +84,10 @@ export function createPreviewSession(now=new Date()){
       if(method==='POST'&&existing){
         if(Object.entries(input).some(([key,val])=>(existing as unknown as Record<string,unknown>)[key]!==val))throw new PreviewError('CONFLICT',409);
         return {ok:true,id:existing.id};
+      }
+      if(collection==='records'&&method==='POST'&&body.quickSleep===true){
+        const latest=sleepTimeline(state.records).latest;
+        if((latest?.id??'')!==(body.expectedSleepId??'')||latest?.kind===body.kind||latest&&+new Date(String(body.at))<=+new Date(latest.at))throw new PreviewError('SLEEP_CONFLICT',409);
       }
       const next={...input,id:String(id??body.id),author:'サンプル',updatedAt:Date.now(),version:existing?existing.version+1:1};
       if(existing)Object.assign(existing,next);

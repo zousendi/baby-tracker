@@ -1,4 +1,4 @@
-export type Kind = 'milk' | 'breast' | 'pee' | 'poop' | 'both';
+export type Kind = 'milk' | 'breast' | 'pee' | 'poop' | 'both' | 'sleep' | 'wake';
 export type RecordItem = { id: string; kind: Kind; at: string; ml: number; left: number; right: number; milkType: 'formula' | 'expressed'; note: string; wakeAt?: string | null; version: number; author: string; updatedAt: number };
 export type Family = { id: string; name: string; babyName: string; birthday: string; goalLow: number | null; goalHigh: number | null; version: number };
 export type User = { id: string; username: string; displayName: string; familyId: string };
