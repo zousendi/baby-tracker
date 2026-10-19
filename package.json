@@ -21,7 +21,8 @@
     "test:uiux": "node tests/uiux.mjs",
     "test:preview-ui": "node tests/preview-ui.mjs",
     "test:sleep-ui": "node tests/sleep-ui.mjs",
-    "test:sleep-api": "node --experimental-strip-types tests/sleep-api.mjs"
+    "test:sleep-api": "node --experimental-strip-types tests/sleep-api.mjs",
+    "test:poop-ui": "node tests/poop-ui.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

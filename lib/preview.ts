@@ -37,7 +37,12 @@ export function createPreviewSession(now=new Date()){
       const at=new Date(`${day}T${String(hour).padStart(2,'0')}:00:00+09:00`);
       if(+at>+now)continue;
       records.push({id:crypto.randomUUID(),kind:'milk',at:at.toISOString(),ml:ml+(offset%3)*10,left:0,right:0,milkType:hour===9?'expressed':'formula',note:'',wakeAt:null,version:1,author:'サンプル',updatedAt:+now});
-      if(hour===5||hour===13||hour===21)records.push({id:crypto.randomUUID(),kind:hour===13?'both':'pee',at:new Date(+at+60000).toISOString(),ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'サンプル',updatedAt:+now});
+      if(hour===5||hour===13||hour===21)records.push({id:crypto.randomUUID(),kind:'pee',at:new Date(+at+60000).toISOString(),ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'サンプル',updatedAt:+now});
+    }
+    const poopHours=offset%5===0?[]:offset%3===0?[7,10,18]:offset%2===0?[9,16]:[11];
+    for(const hour of poopHours){
+      const stamp=+new Date(`${day}T${String(hour).padStart(2,'0')}:${offset%2===0?'15':'40'}:00+09:00`);
+      if(stamp<=+now)records.push({id:crypto.randomUUID(),kind:hour===9?'both':'poop',at:new Date(stamp).toISOString(),ml:0,left:0,right:0,milkType:'formula',note:'',version:1,author:'サンプル',updatedAt:stamp});
     }
     for(const [hour,length] of [[0,4],[7,2],[12,2],[17,1],[21,2]]){
       const start=+new Date(`${day}T${String(hour).padStart(2,'0')}:00:00+09:00`);
