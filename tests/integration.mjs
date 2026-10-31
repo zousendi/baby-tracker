@@ -1,3 +1,4 @@
+import {createTestContext} from './ui-context.mjs';
 import { chromium, webkit } from '@playwright/test';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -19,7 +20,7 @@ let papaName='ypapa',mamaName='ymama';
 try{
   if(!useProvisioned){fixtureFamily=await management('families','POST',{name:`Test analysis ${suffix}`});papaName=`test_p_${suffix}`;mamaName=`test_m_${suffix}`;for(const username of [papaName,mamaName])await management('users','POST',{familyId:fixtureFamily.id,username,displayName:username,password});}
   const options={locale:'ja-JP',timezoneId:'Asia/Tokyo',viewport:{width:390,height:844},...(engine==='webkit'?{isMobile:true,hasTouch:true}:{})};
-  const papa=await browser.newContext(options),mama=await browser.newContext(options),outsider=await browser.newContext(options);
+  const papa=await createTestContext(browser,options),mama=await createTestContext(browser,options),outsider=await createTestContext(browser,options);
   const pp=await papa.newPage(),mp=await mama.newPage();
   pp.on('pageerror',e=>errors.push(e.message));mp.on('pageerror',e=>errors.push(e.message));
   const unauthorized=await papa.request.get(`${base}/api/state`);assert.equal(unauthorized.status(),401);
@@ -27,7 +28,7 @@ try{
   await login(pp,papaName);await login(mp,mamaName);
   const getState=async(ctx)=>(await ctx.request.get(`${base}/api/state`)).json();
   const before=await getState(papa);assert.equal(before.family.name,useProvisioned?'ゆうさくくん':`Test analysis ${suffix}`);assert.equal((await getState(mama)).user.familyId,before.user.familyId);
-  assert.equal(Object.keys(await pp.evaluate(()=>({...localStorage}))).join(','),'komorebi-language');
+  assert.equal(Object.keys(await pp.evaluate(()=>({...localStorage}))).filter(key=>!key.startsWith('komorebi-update-seen:')).join(','),'komorebi-language');
   const cookies=await papa.cookies();const session=cookies.find(c=>c.name==='komorebi_session');assert.ok(session?.httpOnly);if(engine==='edge')assert.equal(session.sameSite,'Lax'); // WebKit on Windows does not report this field reliably; the response header is checked above.
   await pp.locator('.quick.milk').click();await pp.locator('#record-at').fill(localInput(new Date(Date.now()-20*60000)));await pp.getByRole('button',{name:'140',exact:true}).click();await pp.getByRole('button',{name:'10ml増やす',exact:true}).click();await pp.locator('#record-note').fill(`test-${suffix} <script>no</script>`);await pp.getByRole('button',{name:'記録を保存',exact:true}).click();await pp.locator('dialog').waitFor({state:'detached'});
   const after=await getState(papa),record=after.records.find(r=>r.note.startsWith(`test-${suffix}`));assert.equal(record.ml,150);assert.equal(record.wakeAt,null);created.push(record.id);

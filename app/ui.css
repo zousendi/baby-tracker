@@ -76,3 +76,19 @@ body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inse
 .notification-settings input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:#41664f}
 .reminder-interval{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:15px}
 .reminder-interval select{font-size:16px;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+
+/* A concise announcement shares the existing dialog styling. */
+.release-notes-dialog{width:560px}
+.release-brand{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--green);margin-bottom:8px}
+.release-notes-dialog .dialog-head{padding-bottom:12px}
+.release-notes-dialog .dialog-body{padding-top:8px}
+.release-list{list-style:none;padding:0;margin:22px 0 4px;display:grid;gap:19px}
+.release-list h3{font-size:16px;margin-bottom:5px}
+.release-list p{font-size:14px;color:var(--muted);line-height:1.8;overflow-wrap:anywhere}
+.release-notes-dialog .dialog-footer .primary-button{width:100%}
+.install-icon{border-radius:20px;display:block;margin-bottom:22px}
+.home-screen-guide .login-top{margin-bottom:28px}
+.install-steps{list-style:none;padding:0;margin:25px 0;display:grid;gap:18px;counter-reset:install}
+.install-steps li{display:flex;align-items:flex-start;gap:12px;line-height:1.8;font-size:15px}
+.install-steps svg{margin-top:3px;color:var(--green)}
+@media(max-width:700px),(hover:none) and (pointer:coarse) and (max-height:500px){.release-notes-dialog{width:100%}.release-list{gap:16px}.home-screen-guide{display:block}.home-screen-guide .login-card{margin-inline:auto}}

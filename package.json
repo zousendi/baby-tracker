@@ -21,6 +21,7 @@
     "test:uiux": "node tests/uiux.mjs",
     "test:preview-ui": "node tests/preview-ui.mjs",
     "test:web-app-ui": "node --experimental-strip-types tests/web-app-ui.mjs",
+    "test:entry-ui": "node --experimental-strip-types tests/entry-ui.mjs",
     "test:notifications-api": "node --experimental-strip-types tests/notifications-api.mjs",
     "test:sleep-ui": "node tests/sleep-ui.mjs",
     "test:sleep-api": "node --experimental-strip-types tests/sleep-api.mjs",

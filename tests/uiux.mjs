@@ -1,3 +1,4 @@
+import {createTestContext} from './ui-context.mjs';
 import {chromium,webkit,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdirSync} from 'node:fs';
@@ -6,7 +7,7 @@ assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
 const engine=process.env.TEST_BROWSER==='webkit'?'webkit':'edge';
 const browser=await(engine==='webkit'?webkit.launch():chromium.launch({channel:'msedge'}));
 try{
- const context=await browser.newContext({locale:'ja-JP',timezoneId:'Asia/Tokyo',viewport:{width:390,height:844}});
+ const context=await createTestContext(browser,{locale:'ja-JP',timezoneId:'Asia/Tokyo',viewport:{width:390,height:844}});
  const page=await context.newPage(),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.clock.install({time:new Date('2026-10-05T11:00:00+09:00')});
