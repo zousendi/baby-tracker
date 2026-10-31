@@ -3,6 +3,8 @@ import { database, familySelect, recordSelect, weightSelect } from '../../../lib
 import { digest, equal, hashPassword, randomToken, verifyPassword } from '../../../lib/security';
 import { validateWeight } from '../../../lib/weight';
 import type { User } from '../../../lib/types';
+import { allowedPushEndpoint, validPushKeys } from '../../../lib/notification-policy';
+import { dispatchNotifications, notificationTablesReady, pushConfigured, remindersConfigured, queueFamilyNotification } from '../../../lib/notifications';
 
 export const dynamic = 'force-dynamic';
 class ApiError extends Error { constructor(public status: number, public code: string) { super(code); } }
@@ -73,6 +75,11 @@ async function admin(request: Request) {
 async function handle(request: Request) {
   const url = new URL(request.url), path = url.pathname.replace(/^\/api\//, ''), method = request.method;
   try {
+    if(path==='notifications/dispatch'&&method==='POST'){
+      const token=request.headers.get('authorization')?.replace(/^Bearer /,'')||'';
+      if(!env.PUSH_JOB_KEY||env.PUSH_JOB_KEY.length<32||!equal(await digest(token),await digest(env.PUSH_JOB_KEY)))throw new ApiError(403,'FORBIDDEN');
+      return reply(await dispatchNotifications(env,true));
+    }
     if (method !== 'GET') mutationGuard(request);
     if (path === 'login' && method === 'POST') {
       const b = await body(request), username = str(b.username, 40).toLowerCase(), password = str(b.password, 128);
@@ -136,6 +143,37 @@ async function handle(request: Request) {
       throw new ApiError(404, 'NOT_FOUND');
     }
     const user = await currentUser(request), db = database();
+    if(path==='notifications'&&method==='GET'){
+      const ready=await notificationTablesReady(db);
+      const rows=ready?await db.prepare('SELECT id,family_events AS familyEvents,reminder_minutes AS reminderMinutes FROM notification_subscriptions WHERE user_id=? AND session_hash=?').bind(user.id,await digest(sessionToken(request))).all():{results:[]};
+      return reply({configured:ready&&pushConfigured(env),remindersConfigured:ready&&remindersConfigured(env),publicKey:ready&&pushConfigured(env)?env.PUSH_PUBLIC_KEY:null,subscriptions:rows.results});
+    }
+    if(path==='notifications'&&method==='POST'){
+      if(!pushConfigured(env)||!await notificationTablesReady(db))throw new ApiError(503,'PUSH_NOT_CONFIGURED');
+      const b=await body(request),subscription=b.subscription as Record<string,unknown>|undefined;
+      if(!subscription||!allowedPushEndpoint(subscription.endpoint)||!validPushKeys(subscription.keys))throw new ApiError(400,'INVALID_INPUT');
+      if(typeof b.familyEvents!=='boolean'||!['ja','zh'].includes(String(b.language)))throw new ApiError(400,'INVALID_INPUT');
+      const minutes=int(b.reminderMinutes,0,720);
+      if(minutes!==0&&(minutes<30||minutes%15!==0))throw new ApiError(400,'INVALID_INPUT');
+      if(minutes&&!remindersConfigured(env))throw new ApiError(503,'PUSH_REMINDERS_UNAVAILABLE');
+      const id=await digest(subscription.endpoint),sessionHash=await digest(sessionToken(request)),now=Date.now();
+      const previous=await db.prepare('SELECT user_id,p256dh,auth FROM notification_subscriptions WHERE id=?').bind(id).first<{user_id:string;p256dh:string;auth:string}>();
+      if(previous&&previous.user_id!==user.id&&(previous.auth!==subscription.keys.auth||previous.p256dh!==subscription.keys.p256dh))throw new ApiError(403,'FORBIDDEN');
+      const count=await db.prepare('SELECT COUNT(*) AS n FROM notification_subscriptions WHERE user_id=? AND id<>?').bind(user.id,id).first<{n:number}>();
+      if((count?.n||0)>=10)throw new ApiError(400,'INVALID_INPUT');
+      await db.batch([
+        db.prepare('DELETE FROM notification_outbox WHERE subscription_id=? AND EXISTS (SELECT 1 FROM notification_subscriptions WHERE id=? AND user_id<>?)').bind(id,id,user.id),
+        db.prepare(`INSERT INTO notification_subscriptions(id,user_id,family_id,session_hash,endpoint,p256dh,auth,language,family_events,reminder_minutes,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,family_id=excluded.family_id,session_hash=excluded.session_hash,p256dh=excluded.p256dh,auth=excluded.auth,language=excluded.language,family_events=excluded.family_events,reminder_minutes=excluded.reminder_minutes,updated_at=excluded.updated_at`)
+          .bind(id,user.id,user.familyId,sessionHash,subscription.endpoint,subscription.keys.p256dh,subscription.keys.auth,b.language,b.familyEvents?1:0,minutes,now,now),
+      ]);
+      return reply({ok:true,id});
+    }
+    if(path==='notifications'&&method==='DELETE'){
+      const b=await body(request),id=str(b.id,64);
+      await db.prepare('DELETE FROM notification_subscriptions WHERE id=? AND user_id=?').bind(id,user.id).run();
+      return reply({ok:true});
+    }
     if (path === 'state' && method === 'GET') {
       const family = await db.prepare(`SELECT ${familySelect} FROM families WHERE id=?`).bind(user.familyId).first();
       const records = await db.prepare(`SELECT ${recordSelect} FROM records r JOIN users u ON u.id=r.updated_by WHERE r.family_id=? ORDER BY r.at DESC`).bind(user.familyId).all();
@@ -150,6 +188,7 @@ async function handle(request: Request) {
         const existing = await db.prepare('SELECT day,grams,note FROM weights WHERE id=? AND family_id=?').bind(id, user.familyId).first();
         if (!existing || Object.entries(w).some(([key,value])=>existing[key]!==value)) throw new ApiError(409, 'WEIGHT_DAY_EXISTS');
       }
+      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
       return reply({ok:true,id},201);
     }
     if (/^weights\/[^/]+$/.test(path) && ['PATCH','DELETE'].includes(method)) {
@@ -176,6 +215,7 @@ async function handle(request: Request) {
           AND COALESCE((SELECT at FROM records WHERE family_id=? AND kind IN ('sleep','wake') ORDER BY at DESC,updated_at DESC,id DESC LIMIT 1),'')<?`)
           .bind(id,user.familyId,r.kind,r.at,user.id,user.id,Date.now(),user.familyId,expected,user.familyId,r.kind,user.familyId,r.at).run();
         if (!result.meta.changes && !await db.prepare('SELECT id FROM records WHERE id=? AND family_id=? AND kind=? AND at=?').bind(id,user.familyId,r.kind,r.at).first()) throw new ApiError(409,'SLEEP_CONFLICT');
+        if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
         return reply({ok:true,id},201);
       }
       const result = await db.prepare(`INSERT OR IGNORE INTO records(id,family_id,kind,at,ml,left_minutes,right_minutes,milk_type,note,wake_at,created_by,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, user.familyId, r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, r.wakeAt, user.id, user.id, Date.now()).run();
@@ -183,6 +223,7 @@ async function handle(request: Request) {
         const existing = await db.prepare('SELECT kind,at,ml,left_minutes AS "left",right_minutes AS "right",milk_type AS milkType,note,wake_at AS wakeAt FROM records WHERE id=? AND family_id=?').bind(id, user.familyId).first();
         if (!existing || Object.entries(r).some(([key, value]) => existing[key] !== value)) throw new ApiError(409, 'CONFLICT');
       }
+      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
       return reply({ ok: true, id }, 201);
     }
     if (/^records\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method)) {

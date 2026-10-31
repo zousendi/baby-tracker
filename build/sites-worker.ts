@@ -1,9 +1,10 @@
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
+import { dispatchNotifications } from "../lib/notifications";
 
 export default {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
@@ -23,6 +24,13 @@ export default {
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const response=await runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    if(response.ok&&request.method==='POST'&&/^\/api\/(records|weights)$/.test(new URL(request.url).pathname)){
+      ctx.waitUntil(dispatchNotifications(env).catch(()=>{console.warn('Notification dispatch unavailable');}));
+    }
+    return response;
+  },
+  scheduled(_event: ScheduledEvent, env: Cloudflare.Env, ctx: ExecutionContext) {
+    ctx.waitUntil(dispatchNotifications(env,true));
   },
 };

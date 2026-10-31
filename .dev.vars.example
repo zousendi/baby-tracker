@@ -1,2 +1,7 @@
 # Local development only. Generate a random management key of at least 32 characters.
 ADMIN_KEY=
+PUSH_PUBLIC_KEY=
+PUSH_PRIVATE_KEY=
+PUSH_SUBJECT=
+PUSH_JOB_KEY=
+PUSH_REMINDERS_ENABLED=false

@@ -34,3 +34,19 @@ export const weights = sqliteTable('weights', {
   createdBy: text('created_by').notNull().references(() => users.id), updatedBy: text('updated_by').notNull().references(() => users.id),
   version: integer('version').notNull().default(1), updatedAt: integer('updated_at').notNull(),
 }, t => [uniqueIndex('idx_weights_family_day').on(t.familyId, t.day)]);
+
+// Notification storage is independent of existing records, accounts and sessions.
+export const notificationSubscriptions = sqliteTable('notification_subscriptions', {
+  id: text('id').primaryKey(), userId: text('user_id').notNull().references(()=>users.id),
+  familyId: text('family_id').notNull().references(()=>families.id), sessionHash: text('session_hash').notNull(),
+  endpoint: text('endpoint').notNull(), p256dh: text('p256dh').notNull(), auth: text('auth').notNull(),
+  language: text('language').notNull().default('ja'), familyEvents: integer('family_events').notNull().default(1),
+  reminderMinutes: integer('reminder_minutes').notNull().default(0), createdAt: integer('created_at').notNull(),updatedAt: integer('updated_at').notNull(),
+},t=>[index('idx_notification_family').on(t.familyId)]);
+export const notificationOutbox = sqliteTable('notification_outbox', {
+  id: text('id').primaryKey(), subscriptionId: text('subscription_id').notNull().references(()=>notificationSubscriptions.id,{onDelete:'cascade'}),
+  kind: text('kind').notNull(),recordId: text('record_id').notNull(),recordAt: text('record_at'),
+  reminderMinutes: integer('reminder_minutes').notNull().default(0), createdAt: integer('created_at').notNull(), expiresAt: integer('expires_at').notNull(),
+  attempts: integer('attempts').notNull().default(0), nextAttemptAt: integer('next_attempt_at').notNull().default(0),
+  leaseUntil: integer('lease_until').notNull().default(0), deliveredAt: integer('delivered_at'),
+},t=>[index('idx_notification_pending').on(t.deliveredAt,t.nextAttemptAt,t.expiresAt)]);
