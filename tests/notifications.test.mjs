@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {createECDH,randomBytes} from 'node:crypto';
 import webpush from 'web-push';
-import {allowedPushEndpoint,validPushKeys,reminderDue} from '../lib/notification-policy.ts';
+import {allowedPushEndpoint,validPushKeys,reminderDue,notificationCopy} from '../lib/notification-policy.ts';
 import {dispatchNotifications,queueFamilyNotification,queueDueReminders} from '../lib/notifications.ts';
 
 function fixture(){
@@ -38,10 +38,10 @@ test('push destinations reject arbitrary hosts, credentials, ports and malformed
   assert.equal(reminderDue('invalid',180,Date.now()),false);
   assert.equal(reminderDue(new Date(Date.now()-6*3600000).toISOString(),180,Date.now()),false,'Do not send very stale reminders');
 });
-test('family events isolate families, exclude author, inactive/expired/muted users and deduplicate retries',async()=>{
+test('family events isolate families, exclude originating session, inactive/expired/muted users and deduplicate retries',async()=>{
   const f=fixture();
   try{
-    await queueFamilyNotification(f.env,'f','actor','feed');await queueFamilyNotification(f.env,'f','actor','feed');
+    await queueFamilyNotification(f.env,'f','session-actor','feed');await queueFamilyNotification(f.env,'f','session-actor','feed');
     assert.deepEqual(f.sql.prepare('SELECT subscription_id FROM notification_outbox').all().map(r=>r.subscription_id),['sub-recipient']);
   }finally{f.sql.close();}
 });
@@ -49,7 +49,7 @@ test('overlapping dispatches lease each job once and use encrypted Web Push',asy
   const f=fixture(),original=globalThis.fetch,calls=[];
   globalThis.fetch=async(url,options)=>{calls.push({url,options});await new Promise(resolve=>setTimeout(resolve,10));return new Response(null,{status:201});};
   try{
-    await queueFamilyNotification(f.env,'f','actor','feed');
+    await queueFamilyNotification(f.env,'f','session-actor','feed');
     await Promise.all([dispatchNotifications(f.env),dispatchNotifications(f.env)]);
     assert.equal(calls.length,1);assert.match(calls[0].url,/test-recipient$/);
     assert.equal(calls[0].options.redirect,'manual','Workers-supported mode rejects redirects without following them');
@@ -58,6 +58,27 @@ test('overlapping dispatches lease each job once and use encrypted Web Push',asy
     assert.ok(!Buffer.from(calls[0].options.body).toString().includes('家人'));
     await dispatchNotifications(f.env);assert.equal(calls.length,1,'Successful deliveries are not retried');
   }finally{globalThis.fetch=original;f.sql.close();}
+});
+test('the same account on another device receives events but the originating session does not',async()=>{
+  const f=fixture(),original=globalThis.fetch,calls=[];
+  globalThis.fetch=async url=>{calls.push(url);return new Response(null,{status:201});};
+  try{
+    f.sql.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').run('session-actor-other','actor',Date.now()+86400000);
+    f.sql.prepare(`INSERT INTO notification_subscriptions SELECT 'sub-actor-other',user_id,family_id,'session-actor-other','https://fcm.googleapis.com/fcm/send/actor-other',p256dh,auth,language,family_events,reminder_minutes,created_at,updated_at FROM notification_subscriptions WHERE id='sub-actor'`).run();
+    await queueFamilyNotification(f.env,'f','session-actor','feed');
+    assert.deepEqual(f.sql.prepare('SELECT subscription_id FROM notification_outbox ORDER BY subscription_id').all().map(row=>row.subscription_id),['sub-actor-other','sub-recipient']);
+    await dispatchNotifications(f.env);
+    assert.equal(calls.length,2);assert.ok(calls.some(url=>url.endsWith('/actor-other')));assert.ok(!calls.some(url=>url.endsWith('/test-actor')));
+  }finally{globalThis.fetch=original;f.sql.close();}
+});
+test('brief bilingual notifications describe each record without notes or invented weight times',()=>{
+  const at='2026-10-31T12:00:00Z';
+  assert.equal(notificationCopy('family','zh',{kind:'milk',at,ml:120,note:'private note'}).body,'21:00 奶粉 120 ml');
+  assert.equal(notificationCopy('family','ja',{kind:'milk',at,ml:80,milkType:'expressed'}).body,'21:00 搾母乳 80 ml');
+  assert.equal(notificationCopy('family','zh',{kind:'breast',at,left:5,right:7}).body,'21:00 亲喂 12 分钟');
+  for(const [kind,name] of [['pee','小便'],['poop','大便'],['both','小便＋大便'],['sleep','入睡'],['wake','醒来']])assert.equal(notificationCopy('family','zh',{kind,at}).body,`21:00 ${name}`);
+  assert.equal(notificationCopy('family','zh',{kind:'weight',day:'2026-10-31',grams:4500}).body,'10/31 体重 4500 g');
+  assert.equal(notificationCopy('reminder','zh').body,'已到您设置的喂奶提醒时间，请查看最新记录。');
 });
 test('reminders deduplicate scheduler runs and cancel when a later feed is recorded',async()=>{
   const f=fixture(),original=globalThis.fetch;let calls=0;
@@ -73,13 +94,13 @@ test('session revocation stops queued notifications and gone push endpoints are 
   const f=fixture(),original=globalThis.fetch;let calls=0;
   globalThis.fetch=async()=>{calls++;return new Response(null,{status:410});};
   try{
-    await queueFamilyNotification(f.env,'f','actor','feed');
+    await queueFamilyNotification(f.env,'f','session-actor','feed');
     f.sql.prepare('DELETE FROM sessions WHERE user_id=?').run('recipient');
     await dispatchNotifications(f.env);assert.equal(calls,0);
     f.sql.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)').run('session-recipient','recipient',Date.now()+86400000);
     const sub=f.sql.prepare('SELECT * FROM notification_subscriptions WHERE id=?').get('sub-actor');
     f.sql.prepare('INSERT INTO notification_subscriptions(id,user_id,family_id,session_hash,endpoint,p256dh,auth,language,family_events,reminder_minutes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run('sub-recipient','recipient','f','session-recipient','https://fcm.googleapis.com/new',sub.p256dh,sub.auth,'zh',1,0,Date.now(),Date.now());
-    await queueFamilyNotification(f.env,'f','actor','feed');await dispatchNotifications(f.env);
+    await queueFamilyNotification(f.env,'f','session-actor','feed');await dispatchNotifications(f.env);
     assert.equal(calls,1);assert.equal(f.sql.prepare('SELECT id FROM notification_subscriptions WHERE id=?').get('sub-recipient'),undefined);
   }finally{globalThis.fetch=original;f.sql.close();}
 });
@@ -87,7 +108,7 @@ test('transient push failure backs off without changing baby records',async()=>{
   const f=fixture(),original=globalThis.fetch;let calls=0;
   globalThis.fetch=async()=>{calls++;throw new Error('offline');};
   try{
-    await queueFamilyNotification(f.env,'f','actor','feed');await dispatchNotifications(f.env);await dispatchNotifications(f.env);
+    await queueFamilyNotification(f.env,'f','session-actor','feed');await dispatchNotifications(f.env);await dispatchNotifications(f.env);
     assert.equal(calls,1);assert.ok(f.sql.prepare('SELECT next_attempt_at FROM notification_outbox').get().next_attempt_at>Date.now());
     assert.equal(f.sql.prepare('SELECT ml FROM records WHERE id=?').get('feed').ml,120);
   }finally{globalThis.fetch=original;f.sql.close();}

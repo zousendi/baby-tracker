@@ -14,7 +14,7 @@ const mf=new Miniflare({
     ...readdirSync('dist/server',{recursive:true}).filter(path=>path.endsWith('.js')&&path!=='index.js').map(path=>({type:'ESModule',path:resolve('dist/server',path)}))],
   compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],
   d1Databases:['DB'],d1Persist:false,cachePersist:false,kvPersist:false,
-  outboundService:async request=>{assert.equal(new URL(request.url).hostname,'fcm.googleapis.com');outgoing.push({headers:request.headers,body:await request.arrayBuffer()});return new Response(null,{status:201});},
+  outboundService:async request=>{assert.equal(new URL(request.url).hostname,'fcm.googleapis.com');outgoing.push({url:request.url,headers:request.headers,body:await request.arrayBuffer()});return new Response(null,{status:201});},
   bindings:{PUSH_PUBLIC_KEY:vapid.publicKey,PUSH_PRIVATE_KEY:vapid.privateKey,PUSH_SUBJECT:'mailto:test@example.com',PUSH_JOB_KEY:jobKey,PUSH_REMINDERS_ENABLED:'true'},
 });
 try{
@@ -74,6 +74,23 @@ try{
  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM notification_outbox').first()).n,0,'Unsubscribe cascades notification jobs');
  const stateAfter=await(await request('state','GET',undefined,cookie)).json();
  assert.deepEqual(stateAfter.family,stateBefore.family);assert.equal(stateAfter.records.length,1);assert.equal(stateAfter.records[0].id,record.id);assert.equal(stateAfter.records[0].ml,120);assert.deepEqual(stateAfter.weights,stateBefore.weights);
+ // Two independent logins of the SAME account represent different devices.
+ const siblingLogin=await request('login','POST',{username:'first',password:'test-only-password'});
+ assert.equal(siblingLogin.status,200);const siblingCookie=siblingLogin.headers.get('set-cookie').split(';')[0];
+ assert.notEqual(siblingCookie,cookie);
+ assert.equal((await request('notifications','POST',{...value,reminderMinutes:0},cookie)).status,200);
+ const siblingValue={...value,reminderMinutes:0,subscription:{...value.subscription,endpoint:'https://fcm.googleapis.com/fcm/send/sibling-device'}};
+ const siblingSaved=await request('notifications','POST',siblingValue,siblingCookie);assert.equal(siblingSaved.status,200);
+ const siblingId=(await siblingSaved.json()).id;
+ const sameAccountRecord={...record,id:randomUUID(),at:new Date().toISOString(),ml:150};
+ const sameAccountCreated=await request('records','POST',sameAccountRecord,cookie);assert.equal(sameAccountCreated.status,201);
+ if(sameAccountCreated.waitUntil)await sameAccountCreated.waitUntil();
+ await request('notifications/dispatch','POST',{},'',{Authorization:`Bearer ${jobKey}`});
+ assert.equal(outgoing.length,3,'One notification for the other device of the same account');
+ assert.match(outgoing.at(-1).url,/\/sibling-device$/);
+ assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM notification_outbox WHERE record_id=?').bind(sameAccountRecord.id).first()).n,1,'Originating device is excluded');
+ await request('notifications','DELETE',{id:siblingId},siblingCookie);
+ await request('notifications','DELETE',{id},cookie);
  await request('logout','POST',{},cookie);assert.equal((await request('notifications','GET',undefined,cookie)).status,401);
  console.log('Isolated Workers/D1: cookie auth, notifications opt-in/validation, account isolation, dispatcher secret, deduplication preservation, unsubscribe and unchanged family data passed');
 }finally{await mf.dispose();}

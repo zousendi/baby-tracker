@@ -1,6 +1,6 @@
 import webpush from 'web-push';
 import { digest } from './security.ts';
-import { notificationCopy, reminderDue } from './notification-policy.ts';
+import { notificationCopy, reminderDue, type NotificationRecord } from './notification-policy.ts';
 
 type PushEnv=Pick<Cloudflare.Env,'DB'|'PUSH_PUBLIC_KEY'|'PUSH_PRIVATE_KEY'|'PUSH_SUBJECT'|'PUSH_JOB_KEY'|'PUSH_REMINDERS_ENABLED'>;
 export function pushConfigured(env:PushEnv){return Boolean(env.PUSH_PUBLIC_KEY&&env.PUSH_PRIVATE_KEY&&env.PUSH_SUBJECT);}
@@ -10,14 +10,14 @@ export async function notificationTablesReady(db:D1Database){
   return result?.n===2;
 }
 // Called only after an actual insertion. Failure never rolls back a baby record.
-export async function queueFamilyNotification(env:PushEnv,familyId:string,actorId:string,recordId:string){
+export async function queueFamilyNotification(env:PushEnv,familyId:string,originSessionHash:string,recordId:string){
   if(!env.DB||!pushConfigured(env))return;
   const now=Date.now();
   await env.DB.prepare(`INSERT OR IGNORE INTO notification_outbox(id,subscription_id,kind,record_id,created_at,expires_at)
     SELECT 'family:'||n.id||':'||?,n.id,'family',?,?,? FROM notification_subscriptions n
     JOIN users u ON u.id=n.user_id JOIN sessions s ON s.token_hash=n.session_hash AND s.user_id=u.id
-    WHERE n.family_id=? AND u.family_id=n.family_id AND n.user_id<>? AND n.family_events=1 AND u.active=1 AND s.expires_at>?`)
-    .bind(recordId,recordId,now,now+15*60000,familyId,actorId,now).run();
+    WHERE n.family_id=? AND u.family_id=n.family_id AND n.session_hash<>? AND n.family_events=1 AND u.active=1 AND s.expires_at>?`)
+    .bind(recordId,recordId,now,now+15*60000,familyId,originSessionHash,now).run();
 }
 export async function queueDueReminders(env:PushEnv,now=Date.now()){
   if(!env.DB||!remindersConfigured(env))return;
@@ -55,16 +55,18 @@ export async function dispatchNotifications(env:PushEnv,includeReminders=false){
           JOIN sessions s ON s.token_hash=n.session_hash AND s.user_id=u.id
           WHERE n.id=? AND u.active=1 AND u.family_id=n.family_id AND s.expires_at>?`).bind(job.subscription_id,Date.now()).first<Subscription>();
         let valid=Boolean(sub);
+        let familyRecord:NotificationRecord|null=null;
         if(sub&&job.kind==='family'){
-          const record=await db.prepare(`SELECT id FROM records WHERE id=? AND family_id=? UNION ALL SELECT id FROM weights WHERE id=? AND family_id=?`).bind(job.record_id,sub.family_id,job.record_id,sub.family_id).first();
-          valid=Boolean(sub.family_events&&record);
+          familyRecord=await db.prepare(`SELECT kind,at,ml,left_minutes AS "left",right_minutes AS "right",milk_type AS milkType,NULL AS grams,NULL AS day FROM records WHERE id=? AND family_id=?
+            UNION ALL SELECT 'weight',NULL,0,0,0,NULL,grams,day FROM weights WHERE id=? AND family_id=?`).bind(job.record_id,sub.family_id,job.record_id,sub.family_id).first<NotificationRecord>();
+          valid=Boolean(sub.family_events&&familyRecord);
         }
         if(sub&&job.kind==='reminder'){
           const latest=await db.prepare(`SELECT id,at FROM records WHERE family_id=? AND kind IN ('milk','breast') ORDER BY at DESC,updated_at DESC,id DESC LIMIT 1`).bind(sub.family_id).first<{id:string;at:string}>();
           valid=remindersConfigured(env)&&sub.reminder_minutes===job.reminder_minutes&&latest?.id===job.record_id&&latest.at===job.record_at&&reminderDue(latest.at,job.reminder_minutes,Date.now());
         }
         if(!sub||!valid){await db.prepare('DELETE FROM notification_outbox WHERE id=?').bind(id).run();return;}
-        const copy=notificationCopy(job.kind,sub.language);
+        const copy=notificationCopy(job.kind,sub.language,familyRecord);
         const details=webpush.generateRequestDetails({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({...copy,tag:await digest(job.id)}),{
           TTL:300,urgency:'normal',vapidDetails:{subject:env.PUSH_SUBJECT!,publicKey:env.PUSH_PUBLIC_KEY!,privateKey:env.PUSH_PRIVATE_KEY!},
         });

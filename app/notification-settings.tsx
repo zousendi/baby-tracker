@@ -70,12 +70,12 @@ export function NotificationSettings({lang,preview}:{lang:Language;preview:boole
   }
   return <section className="card notification-settings" aria-labelledby="notification-heading">
     <h2 id="notification-heading"><Bell size={20}/>{tr('通知とリマインダー','通知与提醒')}</h2>
-    <p className="muted small">{tr('端末ごとに設定。ロック画面には記録の詳細を表示しません。','按设备设置，锁屏通知不显示记录详情。')}</p>
+    <p className="muted small">{tr('ほかの端末で追加した記録を通知。同じアカウントでも受信できます。通知には時刻・種類・量を表示し、メモは含めません。','接收其他设备新增的记录，同一账号也可接收。通知显示时间、类型和数值，不包含备注。')}</p>
     {preview?<p className="muted">{tr('サンプルでは通知を送信しません。','示例模式不发送通知。')}</p>:<>
       {!supported&&<p className="muted">{tr('iPhoneではホーム画面に追加したアプリから開いてください（iOS 16.4以降）。対応ブラウザと通知の許可が必要です。','iPhone 请从添加到主屏幕的 App 打开（iOS 16.4 以上），需浏览器支持并允许通知。')}</p>}
       {status&&!status.configured&&<p className="muted">{tr('通知の準備中です。サーバー設定が完了すると有効にできます。','通知尚未配置完成，服务器准备好后即可开启。')}</p>}
       <fieldset disabled={busy||!supported||!status?.configured}>
-        <label className="checkbox-label"><input type="checkbox" checked={family} onChange={e=>setFamily(e.target.checked)}/>{tr('家族が記録を追加したら通知','家人新增记录时通知')}</label>
+        <label className="checkbox-label"><input type="checkbox" checked={family} onChange={e=>setFamily(e.target.checked)}/>{tr('ほかの端末で記録を追加したら通知','其他设备新增记录时通知')}</label>
         <label className="checkbox-label"><input type="checkbox" checked={reminder} disabled={!status?.remindersConfigured} onChange={e=>setReminder(e.target.checked)}/>{tr('最後の授乳からのリマインダー','距上次喂奶的定时提醒')}</label>
         {status?.configured&&!status.remindersConfigured&&<p className="muted small">{tr('定時リマインダーはサーバーの定期実行設定後に利用できます。','定时提醒需服务器后台调度配置完成后才能开启。')}</p>}
         {reminder&&<label className="reminder-interval">{tr('授乳後の経過時間','距喂奶时间')}<select aria-label={tr('リマインダーの間隔','提醒间隔')} value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>{[60,90,120,150,180,210,240,300,360].map(n=><option key={n} value={n}>{n/60}{tr('時間','小时')}</option>)}</select></label>}

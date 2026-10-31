@@ -38,7 +38,7 @@ try{
  await page.goto(base);await page.locator('.quick-record').waitFor();
  assert.equal(await page.locator('meta[name=viewport]').getAttribute('content'),'width=device-width, initial-scale=1, viewport-fit=cover');
  assert.equal(await page.locator('meta[name=apple-mobile-web-app-capable]').getAttribute('content'),'yes');
- assert.equal(await page.locator('link[rel=apple-touch-icon]').getAttribute('href'),'/apple-touch-icon.png');
+ assert.equal(await page.locator('link[rel=apple-touch-icon]').getAttribute('href'),'/apple-touch-icon.png?v=2');
  const manifestResponse=await context.request.get(`${base}/manifest.webmanifest`),manifest=await manifestResponse.json();
  assert.equal(manifest.display,'standalone');assert.equal(manifest.start_url,'/');assert.equal(manifest.name,'こもれび');
  for(const icon of ['/apple-touch-icon.png','/app-icon-192.png','/app-icon-512.png']){

@@ -188,7 +188,7 @@ async function handle(request: Request) {
         const existing = await db.prepare('SELECT day,grams,note FROM weights WHERE id=? AND family_id=?').bind(id, user.familyId).first();
         if (!existing || Object.entries(w).some(([key,value])=>existing[key]!==value)) throw new ApiError(409, 'WEIGHT_DAY_EXISTS');
       }
-      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
+      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,await digest(sessionToken(request)),id);}catch{console.warn('Notification enqueue unavailable');}
       return reply({ok:true,id},201);
     }
     if (/^weights\/[^/]+$/.test(path) && ['PATCH','DELETE'].includes(method)) {
@@ -215,7 +215,7 @@ async function handle(request: Request) {
           AND COALESCE((SELECT at FROM records WHERE family_id=? AND kind IN ('sleep','wake') ORDER BY at DESC,updated_at DESC,id DESC LIMIT 1),'')<?`)
           .bind(id,user.familyId,r.kind,r.at,user.id,user.id,Date.now(),user.familyId,expected,user.familyId,r.kind,user.familyId,r.at).run();
         if (!result.meta.changes && !await db.prepare('SELECT id FROM records WHERE id=? AND family_id=? AND kind=? AND at=?').bind(id,user.familyId,r.kind,r.at).first()) throw new ApiError(409,'SLEEP_CONFLICT');
-        if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
+        if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,await digest(sessionToken(request)),id);}catch{console.warn('Notification enqueue unavailable');}
         return reply({ok:true,id},201);
       }
       const result = await db.prepare(`INSERT OR IGNORE INTO records(id,family_id,kind,at,ml,left_minutes,right_minutes,milk_type,note,wake_at,created_by,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, user.familyId, r.kind, r.at, r.ml, r.left, r.right, r.milkType, r.note, r.wakeAt, user.id, user.id, Date.now()).run();
@@ -223,7 +223,7 @@ async function handle(request: Request) {
         const existing = await db.prepare('SELECT kind,at,ml,left_minutes AS "left",right_minutes AS "right",milk_type AS milkType,note,wake_at AS wakeAt FROM records WHERE id=? AND family_id=?').bind(id, user.familyId).first();
         if (!existing || Object.entries(r).some(([key, value]) => existing[key] !== value)) throw new ApiError(409, 'CONFLICT');
       }
-      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,user.id,id);}catch{console.warn('Notification enqueue unavailable');}
+      if(result.meta.changes)try{await queueFamilyNotification(env,user.familyId,await digest(sessionToken(request)),id);}catch{console.warn('Notification enqueue unavailable');}
       return reply({ ok: true, id }, 201);
     }
     if (/^records\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method)) {
