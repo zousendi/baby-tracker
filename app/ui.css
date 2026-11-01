@@ -92,3 +92,21 @@ body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inse
 .install-steps li{display:flex;align-items:flex-start;gap:12px;line-height:1.8;font-size:15px}
 .install-steps svg{margin-top:3px;color:var(--green)}
 @media(max-width:700px),(hover:none) and (pointer:coarse) and (max-height:500px){.release-notes-dialog{width:100%}.release-list{gap:16px}.home-screen-guide{display:block}.home-screen-guide .login-card{margin-inline:auto}}
+
+/* Keep the amount prominent; secondary edits stay available on demand. */
+.editor-dialog .amount-stepper input{font-size:44px;font-weight:600;font-variant-numeric:tabular-nums}
+.edit-details{margin-top:18px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.edit-details summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;min-height:60px;cursor:pointer;list-style:none;color:#355e47;font-size:14px;font-weight:600}
+.edit-details summary::-webkit-details-marker{display:none}
+.edit-details summary>span{min-width:0}
+.edit-details summary small{display:block;margin-top:6px;color:#5d7062;font-size:13px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
+.edit-details summary .edit-note-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.edit-details summary>svg{flex-shrink:0;transition:transform .15s}
+.edit-details[open] summary>svg{transform:rotate(180deg)}
+.edit-details summary:focus-visible{outline:3px solid #b98b35;outline-offset:3px;border-radius:12px}
+.edit-details>div{padding:0 16px 3px;border-top:1px solid var(--line)}
+
+.editor-dialog .presets button{min-height:44px}
+@media(max-width:370px){.editor-dialog .presets{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+.login-session-note{margin-top:18px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;background:#f5f7f2;color:#566b59;font-size:13px;line-height:1.8;overflow-wrap:anywhere}
