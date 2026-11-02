@@ -71,10 +71,13 @@ try{
    assert.ok(dock.y+dock.height<=height-11,'Dock floats above bottom edge');
  }
  await page.setViewportSize({width:390,height:844});
- await page.locator('.quick.milk').click();await page.locator('#record-note').fill('keyboard test');
+ await page.locator('.quick.milk').click();await page.locator('.edit-details summary').click();await page.locator('#record-note').fill('keyboard test');
  await page.evaluate(()=>simulateKeyboard(380));
  await expect(page.locator('dialog')).toHaveAttribute('data-keyboard-open','true');
  assert.ok(await page.locator('dialog').evaluate(node=>node.getBoundingClientRect().height<=356),'Dialog fits simulated keyboard viewport');
+ const closeBox=await page.getByRole('button',{name:'閉じる',exact:true}).boundingBox();
+ const saveBox=await page.getByRole('button',{name:'記録を保存',exact:true}).boundingBox();
+ assert.ok(closeBox.y>=8&&saveBox.y+saveBox.height<=388,'Close and save fit above the simulated keyboard');
  await page.evaluate(()=>simulateKeyboard(innerHeight));await expect(page.locator('dialog')).toHaveAttribute('data-keyboard-open','false');
  await page.getByRole('button',{name:'閉じる',exact:true}).click();
  await page.setViewportSize({width:1440,height:900});await page.emulateMedia({media:'screen'});

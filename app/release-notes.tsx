@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Leaf } from 'lucide-react';
+import { Leaf, X } from 'lucide-react';
+import { text } from '../lib/i18n';
 import type { Language } from '../lib/types';
 import { currentRelease, releaseStorageKey } from '../lib/release-notes.mjs';
 
@@ -19,7 +20,7 @@ export function ReleaseNotes({lang,preview=false,manualOpen=false,onClose}:{lang
   const visible=manualOpen||(!preview&&automaticOpen);
   useEffect(()=>{
     if(!visible)return;
-    const element=dialog.current;element?.showModal();return()=>element?.close();
+    const element=dialog.current;element?.showModal();element?.querySelector<HTMLElement>('#release-title')?.focus({preventScroll:true});return()=>element?.close();
   },[visible]);
   function acknowledge(){
     if(!preview){dismissedThisPage.add(key);try{localStorage.setItem(key,'1');}catch{}}
@@ -27,8 +28,8 @@ export function ReleaseNotes({lang,preview=false,manualOpen=false,onClose}:{lang
   }
   if(!visible)return null;
   return <dialog ref={dialog} className="editor-dialog release-notes-dialog" aria-labelledby="release-title" aria-describedby="release-intro" onCancel={event=>{event.preventDefault();acknowledge();}}>
-    <header className="dialog-head"><div><span className="release-brand"><Leaf size={19}/>こもれび</span><h2 id="release-title">{content.title}</h2></div></header>
+    <header className="dialog-head"><div><span className="release-brand"><Leaf size={19}/>こもれび</span><h2 id="release-title" tabIndex={-1}>{content.title}</h2></div><button type="button" className="icon-button" aria-label={text(lang,'close')} onClick={acknowledge}><X/></button></header>
     <div className="dialog-body"><p id="release-intro" className="muted">{content.intro}</p><ul className="release-list">{content.items.map(([title,body])=><li key={title}><h3>{title}</h3><p>{body}</p></li>)}</ul></div>
-    <footer className="dialog-footer"><button type="button" className="primary-button" autoFocus onClick={acknowledge}>{content.confirm}</button></footer>
+    <footer className="dialog-footer"><button type="button" className="primary-button" onClick={acknowledge}>{content.confirm}</button></footer>
   </dialog>;
 }
